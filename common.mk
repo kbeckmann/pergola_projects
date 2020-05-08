@@ -6,11 +6,14 @@ IDCODE?=--idcode 0x21111043
 SPEED?=8
 LPF_FILE?=../pergola.lpf
 ACM_DEVICE?=/dev/ttyACM0
+TOP_MODULE?=top
 
 all: $(PROJ).bit
 
 %.json: %.v
-	yosys -p "synth_ecp5 -noccu2 -nobram -nomux -json $@" $<
+	yosys \
+	-p "hierarchy -top $(TOP_MODULE)" \
+	-p "synth_ecp5 -noccu2 -nobram -nomux -json $@" $<
 
 %_out.config: %.json
 	nextpnr-ecp5 --json $< --textcfg $@ --$(ECP5_VARIANT) --package $(PACKAGE) --lpf $(LPF_FILE) --speed $(SPEED)
