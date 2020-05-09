@@ -24,7 +24,7 @@ dot:
 
 
 %_out.config: %.json
-	nextpnr-ecp5 --json $< --textcfg $@ --$(ECP5_VARIANT) --package $(PACKAGE) --lpf $(LPF_FILE) --speed $(SPEED)
+	nextpnr-ecp5 --$(ECP5_VARIANT) --json $< --lpf $(LPF_FILE) --package $(PACKAGE) --speed $(SPEED) --textcfg $@
 
 %.bit: %_out.config
 	ecppack $(IDCODE) --svf $(PROJ).svf $< $@
