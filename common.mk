@@ -7,13 +7,21 @@ SPEED?=8
 LPF_FILE?=../pergola.lpf
 ACM_DEVICE?=/dev/ttyACM0
 TOP_MODULE?=top
+YOSYS_OPTIONS?=
 
 all: $(PROJ).bit
 
 %.json: %.v
 	yosys \
 	-p "hierarchy -top $(TOP_MODULE)" \
-	-p "synth_ecp5 -noccu2 -nobram -nomux -json $@" $<
+	-p "synth_ecp5 $(YOSYS_OPTIONS) -json $@" $<
+
+dot:
+	yosys \
+	-p "hierarchy -top $(TOP_MODULE)" \
+	-p "synth_ecp5 $(YOSYS_OPTIONS)" \
+	-p "show" top.v
+
 
 %_out.config: %.json
 	nextpnr-ecp5 --json $< --textcfg $@ --$(ECP5_VARIANT) --package $(PACKAGE) --lpf $(LPF_FILE) --speed $(SPEED)
