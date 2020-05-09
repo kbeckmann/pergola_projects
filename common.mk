@@ -29,6 +29,7 @@ prog_openocd: $(PROJ).svf
 prog: $(PROJ).bit
 	stty -F $(ACM_DEVICE) 300 raw -clocal -echo icrnl
 	sleep 0.1
+	cat $(ACM_DEVICE) > /dev/null &
 	echo "$(shell stat -c%s $^)" > $(ACM_DEVICE)
 	cat $^ > $(ACM_DEVICE)
 	sync
