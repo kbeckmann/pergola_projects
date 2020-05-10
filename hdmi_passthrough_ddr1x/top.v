@@ -31,13 +31,23 @@ reg rst = 0;
 reg [1:0] q_r;
 reg [1:0] q_g;
 reg [1:0] q_b;
-reg [1:0] q_clk;
 
 reg [1:0] d_r;
 reg [1:0] d_g;
 reg [1:0] d_b;
-reg [1:0] d_clk;
 
+// Forward the pixel clock, but delay it
+wire clk_out_z;
+DELAYG #(
+  .DEL_VALUE(25),
+)
+delay_clk(
+  .A(clk_pixel),
+  .Z(clk_out_z)
+);
+
+assign gpdi_out[3] = clk_out_z;
+assign gpdi_out_secondary[3] = clk_out_z;
 
 // Input DDR1x
 parameter d_delay = 0;
@@ -123,14 +133,6 @@ ODDRX1F oddr1x_b(
   .Q(gpdi_out[0]),
 );
 
-ODDRX1F oddr1x_clk(
-  .SCLK(clk_shift),
-  .D0(shift_clk[0]),
-  .D1(shift_clk[1]),
-  .RST(rst),
-  .Q(gpdi_out[3]),
-);
-
 // Output DDR1x to secondary
 ODDRX1F oddr1x_r_second(
   .SCLK(clk_shift),
@@ -156,13 +158,6 @@ ODDRX1F oddr1x_b_second(
   .Q(gpdi_out_secondary[0]),
 );
 
-ODDRX1F oddr1x_clk_second(
-  .SCLK(clk_shift),
-  .D0(shift_clk_second[0]),
-  .D1(shift_clk_second[1]),
-  .RST(rst),
-  .Q(gpdi_out_secondary[3]),
-);
 
 
 

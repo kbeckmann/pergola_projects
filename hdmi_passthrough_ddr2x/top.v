@@ -39,6 +39,18 @@ reg [3:0] d_g;
 reg [3:0] d_b;
 reg [3:0] d_clk;
 
+// Forward the pixel clock, but delay it
+wire clk_out_z;
+DELAYG #(
+  .DEL_VALUE(25),
+)
+delay_clk(
+  .A(clk_pixel),
+  .Z(clk_out_z)
+);
+assign gpdi_out[3] = clk_out_z;
+assign gpdi_out_secondary[3] = clk_out_z;
+
 
 // Input DDR2x
 parameter d_delay = 0;
@@ -109,13 +121,14 @@ IDDRX2F iddr2x_b(
 );
 
 // Output DDR2x to primary
+parameter phase_shift = 0;
 ODDRX2F oddr2x_r(
   .SCLK(clk_shift_half),
   .ECLK(clk_shift),
-  .D0(~shift_r[0]),
-  .D1(~shift_r[1]),
-  .D2(~shift_r[2]),
-  .D3(~shift_r[3]),
+  .D0(~shift_r[(phase_shift + 0) % 10]),
+  .D1(~shift_r[(phase_shift + 1) % 10]),
+  .D2(~shift_r[(phase_shift + 2) % 10]),
+  .D3(~shift_r[(phase_shift + 3) % 10]),
   .RST(rst),
   .Q(gpdi_out[2]),
 );
@@ -123,10 +136,10 @@ ODDRX2F oddr2x_r(
 ODDRX2F oddr2x_g(
   .SCLK(clk_shift_half),
   .ECLK(clk_shift),
-  .D0(~shift_g[0]),
-  .D1(~shift_g[1]),
-  .D2(~shift_g[2]),
-  .D3(~shift_g[3]),
+  .D0(~shift_g[(phase_shift + 0) % 10]),
+  .D1(~shift_g[(phase_shift + 1) % 10]),
+  .D2(~shift_g[(phase_shift + 2) % 10]),
+  .D3(~shift_g[(phase_shift + 3) % 10]),
   .RST(rst),
   .Q(gpdi_out[1]),
 );
@@ -134,69 +147,69 @@ ODDRX2F oddr2x_g(
 ODDRX2F oddr2x_b(
   .SCLK(clk_shift_half),
   .ECLK(clk_shift),
-  .D0(shift_b[0]),
-  .D1(shift_b[1]),
-  .D2(shift_b[2]),
-  .D3(shift_b[3]),
+  .D0(shift_b[(phase_shift + 0) % 10]),
+  .D1(shift_b[(phase_shift + 1) % 10]),
+  .D2(shift_b[(phase_shift + 2) % 10]),
+  .D3(shift_b[(phase_shift + 3) % 10]),
   .RST(rst),
   .Q(gpdi_out[0]),
 );
 
-ODDRX2F oddr2x_clk(
-  .SCLK(clk_shift_half),
-  .ECLK(clk_shift),
-  .D0(shift_clk[0]),
-  .D1(shift_clk[1]),
-  .D2(shift_clk[2]),
-  .D3(shift_clk[3]),
-  .RST(rst),
-  .Q(gpdi_out[3]),
-);
+// ODDRX2F oddr2x_clk(
+//   .SCLK(clk_shift_half),
+//   .ECLK(clk_shift),
+//   .D0(shift_clk[0]),
+//   .D1(shift_clk[1]),
+//   .D2(shift_clk[2]),
+//   .D3(shift_clk[3]),
+//   .RST(rst),
+//   .Q(gpdi_out[3]),
+// );
 
 // Output DDR2x to secondary
-ODDRX2F oddr2x_r_second(
-  .SCLK(clk_shift_half),
-  .ECLK(clk_shift),
-  .D0(shift_r_second[0]),
-  .D1(shift_r_second[1]),
-  .D2(shift_r_second[2]),
-  .D3(shift_r_second[3]),
-  .RST(rst),
-  .Q(gpdi_out_secondary[2]),
-);
+// ODDRX2F oddr2x_r_second(
+//   .SCLK(clk_shift_half),
+//   .ECLK(clk_shift),
+//   .D0(shift_r_second[0]),
+//   .D1(shift_r_second[1]),
+//   .D2(shift_r_second[2]),
+//   .D3(shift_r_second[3]),
+//   .RST(rst),
+//   .Q(gpdi_out_secondary[2]),
+// );
 
-ODDRX2F oddr2x_g_second(
-  .SCLK(clk_shift_half),
-  .ECLK(clk_shift),
-  .D0(shift_g_second[0]),
-  .D1(shift_g_second[1]),
-  .D2(shift_g_second[2]),
-  .D3(shift_g_second[3]),
-  .RST(rst),
-  .Q(gpdi_out_secondary[1]),
-);
+// ODDRX2F oddr2x_g_second(
+//   .SCLK(clk_shift_half),
+//   .ECLK(clk_shift),
+//   .D0(shift_g_second[0]),
+//   .D1(shift_g_second[1]),
+//   .D2(shift_g_second[2]),
+//   .D3(shift_g_second[3]),
+//   .RST(rst),
+//   .Q(gpdi_out_secondary[1]),
+// );
 
-ODDRX2F oddr2x_b_second(
-  .SCLK(clk_shift_half),
-  .ECLK(clk_shift),
-  .D0(shift_b_second[0]),
-  .D1(shift_b_second[1]),
-  .D2(shift_b_second[2]),
-  .D3(shift_b_second[3]),
-  .RST(rst),
-  .Q(gpdi_out_secondary[0]),
-);
+// ODDRX2F oddr2x_b_second(
+//   .SCLK(clk_shift_half),
+//   .ECLK(clk_shift),
+//   .D0(shift_b_second[0]),
+//   .D1(shift_b_second[1]),
+//   .D2(shift_b_second[2]),
+//   .D3(shift_b_second[3]),
+//   .RST(rst),
+//   .Q(gpdi_out_secondary[0]),
+// );
 
-ODDRX2F oddr2x_clk_second(
-  .SCLK(clk_shift_half),
-  .ECLK(clk_shift),
-  .D0(shift_clk_second[0]),
-  .D1(shift_clk_second[1]),
-  .D2(shift_clk_second[2]),
-  .D3(shift_clk_second[3]),
-  .RST(rst),
-  .Q(gpdi_out_secondary[3]),
-);
+// ODDRX2F oddr2x_clk_second(
+//   .SCLK(clk_shift_half),
+//   .ECLK(clk_shift),
+//   .D0(shift_clk_second[0]),
+//   .D1(shift_clk_second[1]),
+//   .D2(shift_clk_second[2]),
+//   .D3(shift_clk_second[3]),
+//   .RST(rst),
+//   .Q(gpdi_out_secondary[3]),
+// );
 
 
 
@@ -209,13 +222,13 @@ always @(posedge clk_shift_half) begin
   shift_g   <= {shift_g[5:0],   q_g};
   shift_b   <= {shift_b[5:0],   ~q_b};
 
-  shift_r_second <= shift_r;
-  shift_g_second <= shift_g;
-  shift_b_second <= shift_b;
-  shift_clk_second <= shift_clk;
+  // shift_r_second <= shift_r;
+  // shift_g_second <= shift_g;
+  // shift_b_second <= shift_b;
+  // shift_clk_second <= shift_clk;
 
   // This isn't really correct...
-  shift_clk <= {shift_clk[5:0], clk_pixel, clk_pixel, clk_pixel, clk_pixel};
+  // shift_clk <= {shift_clk[5:0], clk_pixel, clk_pixel, clk_pixel, clk_pixel};
 end
 
 
