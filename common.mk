@@ -20,7 +20,7 @@ dot:
 	yosys \
 	-p "hierarchy -top $(TOP_MODULE)" \
 	-p "synth_ecp5 $(YOSYS_OPTIONS)" \
-	-p "show" top.v
+	-p "show" $(PROJ).v
 
 
 %_out.config: %.json
@@ -42,8 +42,7 @@ prog: $(PROJ).bit
 	cat $^ > $(ACM_DEVICE)
 	sync
 
-
 clean:
 	rm -f *.svf *.bit *.config *.json
 
-.PHONY: prog clean
+.PHONY: prog clean dot
