@@ -1,9 +1,9 @@
 from nmigen import *
-from nmigen_boards.pergola import *
-from ecp5pll import ECP5PLL, ECP5PLLConfig
+from .. import Applet
+from ...util.ecp5pll import ECP5PLL, ECP5PLLConfig
 
-class Top(Elaboratable):
-    def __init__(self):
+class Blinky(Applet, applet_name="pll"):
+    def __init__(self, args):
         self.blink = Signal()
 
     def elaborate(self, platform):
@@ -35,27 +35,3 @@ class Top(Elaboratable):
             m.d.comb += self.blink.eq(timer1[-1])
 
         return m
-
-
-if __name__ == "__main__":
-    import argparse
-
-    parser = argparse.ArgumentParser()
-    p_action = parser.add_subparsers(dest="action")
-    p_action.add_parser("build")
-    p_action.add_parser("program")
-    p_action.add_parser("dot")
-    p_action.add_parser("simulate")
-
-    args = parser.parse_args()
-
-    platform = PergolaPlatform()
-    if args.action == "build":
-        platform.build(Top(), do_program=False)
-    elif args.action == "program":
-        platform.build(Top(), do_program=True)
-    elif args.action == "dot":
-        platform.build(Top(), do_program=False, yosys_opts="-p show")
-    elif args.action == "simulate":
-        pass
-

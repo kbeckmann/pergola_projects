@@ -1,8 +1,11 @@
 from nmigen import *
-from nmigen_boards.pergola import *
+from .. import Applet
 
-class Blinky(Elaboratable):
-    def __init__(self):
+class Blinky(Applet, applet_name="blinky"):
+    description = "Blinks some LEDs"
+    help = "Blinks some LEDs"
+
+    def __init__(self, args):
         self.blink = Signal()
 
     def elaborate(self, platform):
@@ -22,7 +25,3 @@ class Blinky(Elaboratable):
 
         return m
 
-
-if __name__ == "__main__":
-    platform = PergolaPlatform()
-    platform.build(Blinky(), do_program=True)
