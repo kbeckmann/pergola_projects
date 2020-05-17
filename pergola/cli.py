@@ -19,12 +19,28 @@ def main():
     subparsers = parser.add_subparsers(dest="action", metavar="COMMAND")
     subparsers.required = True
 
-    for action in ["run", "build", "dot", "test"]:
-        p_action = subparsers.add_parser(
-            action,
-            description="Builds and loads an applet bitstream",
-            help="builds and loads an applet bitstream")
-        p_action_applet = p_action.add_subparsers(dest="applet", metavar="APPLET")
+    p_run = subparsers.add_parser(
+        "run",
+        description="Builds and loads an applet bitstream",
+        help="builds and loads an applet bitstream")
+
+    p_build = subparsers.add_parser(
+        "build",
+        description="Builds an applet bitstream",
+        help="builds an applet bitstream")
+
+    p_dot = subparsers.add_parser(
+        "dot",
+        description="Builds an applet bitstream and shows a graph of the design",
+        help="builds an applet bitstream and shows a graph of the design")
+
+    p_test = subparsers.add_parser(
+        "test",
+        description="Builds and loads an applet bitstream",
+        help="builds and loads an applet bitstream")
+
+    for action_parser in [p_run, p_build, p_dot, p_test]:
+        p_action_applet = action_parser.add_subparsers(dest="applet", metavar="APPLET")
         for applet in Applet.all.values():
             subparser = p_action_applet.add_parser(
                 applet.applet_name,
