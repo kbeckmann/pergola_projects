@@ -3,6 +3,9 @@
 *.svf
 *.config
 *.pyc
+
+**/*_formal*/
 *.vcd
 *.gtkw
+
 build

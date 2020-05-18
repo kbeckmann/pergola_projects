@@ -1,5 +1,8 @@
 from nmigen import *
-from nmigen.back.pysim import Active
+from nmigen.back.pysim import Simulator, Active
+from nmigen.test.utils import FHDLTestCase
+from nmigen.asserts import *
+
 from .. import Applet
 
 
@@ -27,43 +30,48 @@ class Blinky(Elaboratable):
         return m
 
 
-class BlinkyTest(Elaboratable):
-    def __init__(self, args):
-        pass
-
-    def elaborate(self, platform):
+class BlinkyTest(FHDLTestCase):
+    def test_blinky(self):
         from nmigen.compat.fhdl.specials import TSTriple
-        led = TSTriple()
         btn = Signal()
+        led = TSTriple()
+        m = Module()
+        blinky = m.submodules.blinky = Blinky(led, btn)
+
+        sim = Simulator(m)
+        sim.add_clock(1e-6)
+        def process():
+            yield Active()
+            assert (yield blinky.timer) == 0
+            yield
+            assert (yield blinky.timer) == 1
+            yield
+            assert (yield blinky.timer) == 2
+            yield
+            assert (yield blinky.timer) == 3
+            yield
+
+        sim.add_sync_process(process)
+        with sim.write_vcd("blinky.vcd"):
+            sim.run()
+
+    def test_blinky_formal(self):
+        from nmigen.compat.fhdl.specials import TSTriple
+        btn = Signal()
+        led = TSTriple()
 
         m = Module()
+        m.submodules.blinky = Blinky(led, btn)
 
-        self.tm = Blinky(led, btn)
-        m.submodules.blinky = self.tm
+        # If the button is pressed, the led should always be on
+        m.d.comb += Assert(btn.implies(led.o))
 
-        return m
-
-    def testbench(self, sim):
-        sim.add_clock(1e-6)
-
-        def loopback_proc():
-            yield Active()
-            assert (yield self.tm.timer) == 0
-            yield
-            assert (yield self.tm.timer) == 1
-            yield
-            assert (yield self.tm.timer) == 2
-            yield
-            assert (yield self.tm.timer) == 3
-            yield
-
-        sim.add_sync_process(loopback_proc)
+        self.assertFormal(m, depth=10)
 
 
 class BlinkyApplet(Applet, applet_name="blinky"):
     description = "Blinks some LEDs"
     help = "Blinks some LEDs"
-    test_class = BlinkyTest
 
     def __init__(self, args):
         pass
