@@ -3,7 +3,7 @@ from nmigen.back.pysim import Active
 from .. import Applet
 
 
-class BlinkyImpl(Elaboratable):
+class Blinky(Elaboratable):
     description = "Blinks some LEDs"
     help = "Blinks some LEDs"
 
@@ -38,7 +38,7 @@ class BlinkyTest(Elaboratable):
 
         m = Module()
 
-        self.tm = BlinkyImpl(led, btn)
+        self.tm = Blinky(led, btn)
         m.submodules.blinky = self.tm
 
         return m
@@ -60,7 +60,7 @@ class BlinkyTest(Elaboratable):
         sim.add_sync_process(loopback_proc)
 
 
-class Blinky(Applet, applet_name="blinky"):
+class BlinkyApplet(Applet, applet_name="blinky"):
     description = "Blinks some LEDs"
     help = "Blinks some LEDs"
     test_class = BlinkyTest
@@ -74,6 +74,6 @@ class Blinky(Applet, applet_name="blinky"):
 
         m = Module()
 
-        m.submodules.blinky = BlinkyImpl(led, btn)
+        m.submodules.blinky = Blinky(led, btn)
 
         return m

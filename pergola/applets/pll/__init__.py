@@ -2,7 +2,7 @@ from nmigen import *
 from .. import Applet
 from ...util.ecp5pll import ECP5PLL, ECP5PLLConfig
 
-class Blinky(Applet, applet_name="pll"):
+class PLLApplet(Applet, applet_name="pll"):
     def __init__(self, args):
         self.blink = Signal()
 
