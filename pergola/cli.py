@@ -103,7 +103,7 @@ def main():
                 if hasattr(applet_cls, "test_class"):
                     run_test(applet_cls, args)
                 else:
-                    print("WARN: {} is missing a test class".format(applet))
+                    logger.warn("'{}' is missing a test class.".format(applet))
         else:
             applet_cls = Applet.all[args.applet]
             run_test(applet_cls, args)
