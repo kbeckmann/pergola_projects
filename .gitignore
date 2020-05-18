@@ -3,4 +3,6 @@
 *.svf
 *.config
 *.pyc
+*.vcd
+*.gtkw
 build
