@@ -13,8 +13,10 @@ class HDMISplitterApplet(Applet, applet_name="hdmi-splitter"):
     PMOD5 is output 2
     """
 
-    def __init__(self, args, platform):
+    def __init__(self, args):
         self.blink = Signal()
+
+    def elaborate(self, platform):
         platform.add_resources([
             Resource("pmod1_lvds", 0, Pins("L1 J1 G1", dir="o"),
                      Attrs(IO_TYPE="LVDS")),
@@ -33,7 +35,6 @@ class HDMISplitterApplet(Applet, applet_name="hdmi-splitter"):
                      Attrs(IO_TYPE="LVDS")),
         ])
 
-    def elaborate(self, platform):
         hdmi_in = platform.request("pmod2_lvds", 0)
 
         hdmi_out = platform.request("pmod1_lvds", 0)

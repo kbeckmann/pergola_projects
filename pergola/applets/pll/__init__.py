@@ -16,7 +16,7 @@ class PLLApplet(Applet, applet_name="pll"):
 
     """
 
-    def __init__(self, args, platform):
+    def __init__(self, args):
         self.blink = Signal()
 
     def elaborate(self, platform):
