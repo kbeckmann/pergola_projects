@@ -70,7 +70,7 @@ class BlinkyApplet(Applet, applet_name="blinky"):
     description = "Blinks some LEDs"
     help = "Blinks some LEDs"
 
-    def __init__(self, args):
+    def __init__(self, args, platform):
         pass
 
     def elaborate(self, platform):

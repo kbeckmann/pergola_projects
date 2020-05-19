@@ -49,15 +49,15 @@ def main():
     if args.action == "run":
         applet_cls = Applet.all[args.applet]
         platform = PergolaPlatform()
-        platform.build(applet_cls(args=args), do_program=True)
+        platform.build(applet_cls(args=args, platform=platform), do_program=True)
     if args.action == "build":
         applet_cls = Applet.all[args.applet]
         platform = PergolaPlatform()
-        platform.build(applet_cls(args=args), do_program=False)
+        platform.build(applet_cls(args=args, platform=platform), do_program=False)
     if args.action == "dot":
         applet_cls = Applet.all[args.applet]
         platform = PergolaPlatform()
-        platform.build(applet_cls(args=args), do_program=False, yosys_opts="-p show")
+        platform.build(applet_cls(args=args, platform=platform), do_program=False, yosys_opts="-p show")
 
 if __name__ == "__main__":
     main()
