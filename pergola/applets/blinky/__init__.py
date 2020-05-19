@@ -7,9 +7,6 @@ from .. import Applet
 
 
 class Blinky(Elaboratable):
-    description = "Blinks some LEDs"
-    help = "Blinks some LEDs"
-
     def __init__(self, led, btn):
         self.led = led
         self.btn = btn
