@@ -146,6 +146,7 @@ class ECP5PLL(Elaboratable):
             "cphase": 0,
             "fphase": 0,
             "enabled": False,
+            "error": 0,
             }]*3
         params["error"] = error
         return params
