@@ -33,30 +33,30 @@ IOBUF  PORT "btn" PULLMODE=NONE IO_TYPE=LVCMOS33 DRIVE=4;
 # Connector("pmod", 3, "B11 B12 B13 B14 - - A12 A13 A14 A15 - -"), # PMOD4
 # Connector("pmod", 4, "F16 G16 J16 L16 - - G15 H15 J15 L15 - -"), # PMOD5
 
-# PMOD1 INPUT
+# PMOD1 OUTPUT
 # Connector("pmod", 0, "P2  L1  J2  H2  - - N1  L2  J1  G1  - -"), # PMOD1
 #                       C+  0+  1+  2+      C-  0-  1-  2-
 LOCATE COMP "gpdi_out[0]" SITE "L1"; # Blue
 LOCATE COMP "gpdi_out[1]" SITE "J1"; # Green inverted
 LOCATE COMP "gpdi_out[2]" SITE "G1"; # Red inverted
 LOCATE COMP "gpdi_out[3]" SITE "N1"; # Clock inverted
-IOBUF PORT "gpdi_out[0]" IO_TYPE=LVDS DIR=INPUT DIFFRESISTOR=100;
-IOBUF PORT "gpdi_out[1]" IO_TYPE=LVDS DIR=INPUT DIFFRESISTOR=100;
-IOBUF PORT "gpdi_out[2]" IO_TYPE=LVDS DIR=INPUT DIFFRESISTOR=100;
-IOBUF PORT "gpdi_out[3]" IO_TYPE=LVDS DIR=INPUT DIFFRESISTOR=100;
+IOBUF PORT "gpdi_out[0]" IO_TYPE=LVDS DIR=OUTPUT;
+IOBUF PORT "gpdi_out[1]" IO_TYPE=LVDS DIR=OUTPUT;
+IOBUF PORT "gpdi_out[2]" IO_TYPE=LVDS DIR=OUTPUT;
+IOBUF PORT "gpdi_out[3]" IO_TYPE=LVDS DIR=OUTPUT;
 
 
-# PMOD2 OUTPUT
+# PMOD2 INPUT
 # Connector("pmod", 1, "G2  E2  C1  B1  - - F1  D1  C2  B2  - -"), # PMOD2
 #                       C+  0+  1+  2+      C-  0-  1-  2-
 LOCATE COMP "gpdi_in[0]" SITE "D1"; # Blue inverted
 LOCATE COMP "gpdi_in[1]" SITE "C1"; # Green
 LOCATE COMP "gpdi_in[2]" SITE "B1"; # Red
 LOCATE COMP "gpdi_in[3]" SITE "F1"; # Clock inverted
-IOBUF PORT "gpdi_in[0]" IO_TYPE=LVDS DIR=OUTPUT;
-IOBUF PORT "gpdi_in[1]" IO_TYPE=LVDS DIR=OUTPUT;
-IOBUF PORT "gpdi_in[2]" IO_TYPE=LVDS DIR=OUTPUT;
-IOBUF PORT "gpdi_in[3]" IO_TYPE=LVDS DIR=OUTPUT;
+IOBUF PORT "gpdi_in[0]" IO_TYPE=LVDS DIR=INPUT DIFFRESISTOR=100;
+IOBUF PORT "gpdi_in[1]" IO_TYPE=LVDS DIR=INPUT DIFFRESISTOR=100;
+IOBUF PORT "gpdi_in[2]" IO_TYPE=LVDS DIR=INPUT DIFFRESISTOR=100;
+IOBUF PORT "gpdi_in[3]" IO_TYPE=LVDS DIR=INPUT DIFFRESISTOR=100;
 
 # Connector("pmod", 4, "F16 G16 J16 L16 - - G15 H15 J15 L15 - -"), # PMOD5
 LOCATE COMP "gpdi_out_secondary[0]" SITE "G16"; # Blue
