@@ -89,13 +89,14 @@ class ECP5PLL(Elaboratable):
     VCO_MIN = 400.0
     VCO_MAX = 800.0
 
-    def __init__(self, clock_config=None, clock_signal_name=None):
+    def __init__(self, clock_config=None, clock_signal_name=None, clock_signal_freq=None):
         """
         Parameters:
             clock_config:      Array of ECP5PLLConfig objects. Must have 1 to 4 elements.
             clock_signal_name: Input clock signal name. Uses default clock if not specified.
         """
         self.clock_name = clock_signal_name
+        self.clock_signal_freq = clock_signal_freq
 
         assert(1 <= len(clock_config) <= 4)
         assert(clock_config[0].phase == 0)
@@ -191,8 +192,14 @@ class ECP5PLL(Elaboratable):
 
         # Grab our input clock
         clock_name = self.clock_name if self.clock_name else platform.default_clk
-        self.clkin_frequency = platform.lookup(clock_name).clock.frequency / 1e6
-        input_clock_pin = platform.request(clock_name)
+        
+        try:
+            self.clkin_frequency = platform.lookup(clock_name).clock.frequency / 1e6
+            input_clock_pin = platform.request(clock_name)
+        except:
+            input_clock_pin = ClockSignal(clock_name)
+            # TODO: Make this nicer, remove clock_signal_freq
+            self.clkin_frequency = self.clock_signal_freq / 1e6
 
         # Calculate configuration parameters
         params = self.calc_pll_params(self.clkin_frequency, self.clock_config[0].freq)
