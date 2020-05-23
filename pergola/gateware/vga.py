@@ -20,6 +20,30 @@ AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT
 OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 """
+
+class VGAParameters:
+    def __init__(self, h_front, h_sync, h_back, h_active, v_front, v_sync, v_back, v_active):
+        self.h_front = h_front
+        self.h_sync = h_sync
+        self.h_back = h_back
+        self.h_active = h_active
+        self.v_front = v_front
+        self.v_sync = v_sync
+        self.v_back = v_back
+        self.v_active = v_active
+
+    def __repr__(self):
+        return "(VGAParameters {} {} {} {} {} {} {} {})".format(
+            self.h_front,
+            self.h_sync,
+            self.h_back,
+            self.h_active,
+            self.v_front,
+            self.v_sync,
+            self.v_back,
+            self.v_active)
+
+
 class VGAOutput(Elaboratable):
     def __init__(self, output):
         self.output = output
@@ -51,23 +75,24 @@ class VGAOutput(Elaboratable):
 
 
 class VGAOutputSubtarget(Elaboratable):
-    def __init__(self, output, h_front, h_sync, h_back, h_active, v_front, v_sync, v_back, v_active, r=None, g=None, b=None):
+    def __init__(self, output, vga_parameters, r=None, g=None, b=None):
 
         self.output = output
-        self.h_front = h_front
-        self.h_sync = h_sync
-        self.h_active = h_active
+        self.vga_parameters = params = vga_parameters
+        self.h_front = params.h_front
+        self.h_sync = params.h_sync
+        self.h_active = params.h_active
 
-        self.h_total = h_front + h_sync + h_back + h_active
-        self.v_total = v_front + v_sync + v_back + v_active
+        self.h_total = params.h_front + params.h_sync + params.h_back + params.h_active
+        self.v_total = params.v_front + params.v_sync + params.v_back + params.v_active
 
-        self.v_front = v_front
-        self.v_sync = v_sync
+        self.v_front = params.v_front
+        self.v_sync = params.v_sync
         self.h_ctr = Signal(range(self.h_total + 1))
         self.v_ctr = Signal(range(self.v_total + 1))
         self.h_en  = Signal()
         self.v_en  = Signal()
-        self.v_active = v_active
+        self.v_active = params.v_active
 
         self.r = r
         self.g = g

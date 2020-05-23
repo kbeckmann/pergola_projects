@@ -63,16 +63,17 @@ class VGA2DVI(Elaboratable):
     out_b:     TMDS encoded output in shift clock domain
     out_clock: Clock output in shift clock domain
 
+    xdr:       Data rate. SDR=1, DDR=2, QDR=4
+
     Clock domains
     sync:      Pixel clock
     shift:     TMDS output shift clock (10x pixel clock)
 
-    TODO: Add DDR1x support
-    TODO: Add DDR2x support
-    TODO: Add clock synchronizer
+    TODO: Add QDR support
     """
 
-    def __init__(self, in_r, in_g, in_b, in_blank, in_hsync, in_vsync, out_r, out_g, out_b, out_clock):
+
+    def __init__(self, in_r, in_g, in_b, in_blank, in_hsync, in_vsync, out_r, out_g, out_b, out_clock, xdr=1):
         self.in_r = in_r
         self.in_g = in_g
         self.in_b = in_b
@@ -83,9 +84,12 @@ class VGA2DVI(Elaboratable):
         self.out_g = out_g
         self.out_b = out_b
         self.out_clock = out_clock
+        self.xdr = xdr
 
     def elaborate(self, platform):
         m = Module()
+
+        xdr = self.xdr
 
         c_red = Signal(2)
         c_green = Signal(2)
@@ -109,12 +113,6 @@ class VGA2DVI(Elaboratable):
         shift_green = Signal(10)
         shift_blue  = Signal(10)
         
-        # R_shift_clock_off_sync = Signal()
-        # m.d.sync += R_shift_clock_off_sync.eq(shift_clock[4:5] != C_shift_clock_initial[4:5])
-
-        # R_shift_clock_synchronizer = Signal(8, reset = 1<<7)
-        R_shift_clock_synchronizer = Signal(8)
-
         latched_red   = Signal(10)
         latched_green = Signal(10)
         latched_blue  = Signal(10)
@@ -123,40 +121,23 @@ class VGA2DVI(Elaboratable):
         m.d.sync += latched_blue.eq(encoded_blue)
 
         m.d.comb += [
-            self.out_r.eq(shift_red[0]),
-            self.out_g.eq(shift_green[0]),
-            self.out_b.eq(shift_blue[0]),
-            self.out_clock.eq(shift_clock[0])
+            self.out_r.eq(shift_red[:xdr]),
+            self.out_g.eq(shift_green[:xdr]),
+            self.out_b.eq(shift_blue[:xdr]),
+            self.out_clock.eq(shift_clock[:xdr])
         ]
-
-        # with m.If(R_shift_clock_off_sync):
-        #     with m.If(R_shift_clock_synchronizer[7]):
-        #         m.d.shift += R_shift_clock_synchronizer.eq(0)
-        #     with m.Else():
-        #         m.d.shift += R_shift_clock_synchronizer.eq(R_shift_clock_synchronizer + 1)
-        # with m.Else():
-        #     m.d.shift += R_shift_clock_synchronizer.eq(0)
 
         with m.If(shift_clock[4:6] == C_shift_clock_initial[4:6]):
             m.d.shift += shift_red.eq(latched_red)
             m.d.shift += shift_green.eq(latched_green)
             m.d.shift += shift_blue.eq(latched_blue)
         with m.Else():
-            m.d.shift += shift_red.eq(Cat(shift_red[1:], 0))
-            m.d.shift += shift_green.eq(Cat(shift_green[1:], 0))
-            m.d.shift += shift_blue.eq(Cat(shift_blue[1:], 0))
+            m.d.shift += shift_red.eq(Cat(shift_red[xdr:], 0))
+            m.d.shift += shift_green.eq(Cat(shift_green[xdr:], 0))
+            m.d.shift += shift_blue.eq(Cat(shift_blue[xdr:], 0))
         
 
-        m.d.shift += shift_clock.eq(Cat(shift_clock[1:], shift_clock[0]))
-        # R_sync_fail = Signal(7, reset=1<<6)
-        # with m.If(~R_shift_clock_synchronizer[7]):
-        #     m.d.shift += shift_clock.eq(Cat(0, shift_clock[1:]))
-        # with m.Else():
-        #     with m.If(R_sync_fail[6]):
-        #         m.d.shift += shift_clock.eq(C_shift_clock_initial)
-        #         m.d.shift += R_sync_fail.eq(0)
-        #     with m.Else():
-        #         m.d.shift += R_sync_fail.eq(R_sync_fail + 1)
+        m.d.shift += shift_clock.eq(Cat(shift_clock[xdr:], shift_clock[:xdr]))
 
         return m
 

@@ -1,4 +1,7 @@
 from nmigen import *
+from nmigen.back.pysim import Simulator, Active
+from nmigen.test.utils import FHDLTestCase
+from nmigen.asserts import *
 
 """
 
@@ -139,3 +142,24 @@ class TMDSEncoder(Elaboratable):
                 m.d.sync += dc_bias.eq(dc_bias - data_word_inv[8] + data_word_disparity)
 
         return m
+
+
+class TMDSEncoderTest(FHDLTestCase):
+
+    def test_tmds_formal(self):
+        from nmigen.compat.fhdl.specials import TSTriple
+
+        data = Signal(8)
+        c = Signal(2)
+        blank = Signal()
+        encoded = Signal(10)
+
+        m = Module()
+        m.submodules.tmds = TMDSEncoder(data, c, blank, encoded)
+
+        clk = Signal(32)
+        m.d.sync += clk.eq(clk + 1)
+        with m.If(clk > 2):
+            m.d.comb += Assert(encoded != Past(encoded))
+
+        self.assertFormal(m, depth=100)
