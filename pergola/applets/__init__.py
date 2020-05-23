@@ -36,6 +36,7 @@ class Applet(Elaboratable):
         pass
 
 from . import blinky
+from . import ddr
 from . import hdmi
 from . import hdmi_splitter
 from . import pll
