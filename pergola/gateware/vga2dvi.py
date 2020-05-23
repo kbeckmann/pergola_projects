@@ -67,7 +67,8 @@ class VGA2DVI(Elaboratable):
 
     Clock domains
     sync:      Pixel clock
-    shift:     TMDS output shift clock (10x pixel clock)
+    shift:     TMDS output shift clock, multiplier of pixel clock: SDR=10x, DDR=5x, QDR=2.5x
+    shift_x2:  Only needed in QDR. 5x pixel clock
 
     TODO: Add QDR support
     """
@@ -96,48 +97,105 @@ class VGA2DVI(Elaboratable):
         c_blue = Signal(2)
         m.d.comb += c_blue.eq(Cat(self.in_hsync, self.in_vsync))
 
-        encoded_red = Signal(10)
-        encoded_green = Signal(10)
-        encoded_blue = Signal(10)
+        if xdr == 1 or xdr == 2:
+            encoded_red = Signal(10)
+            encoded_green = Signal(10)
+            encoded_blue = Signal(10)
 
-        m.submodules.tmds_r = tmds_r = TMDSEncoder(data=self.in_r, c=c_red,   blank=self.in_blank, encoded=encoded_red)
-        m.submodules.tmds_g = tmds_g = TMDSEncoder(data=self.in_g, c=c_green, blank=self.in_blank, encoded=encoded_green)
-        m.submodules.tmds_b = tmds_b = TMDSEncoder(data=self.in_b, c=c_blue,  blank=self.in_blank, encoded=encoded_blue)
+            m.submodules.tmds_r = tmds_r = TMDSEncoder(data=self.in_r, c=c_red,   blank=self.in_blank, encoded=encoded_red)
+            m.submodules.tmds_g = tmds_g = TMDSEncoder(data=self.in_g, c=c_green, blank=self.in_blank, encoded=encoded_green)
+            m.submodules.tmds_b = tmds_b = TMDSEncoder(data=self.in_b, c=c_blue,  blank=self.in_blank, encoded=encoded_blue)
 
+            shift_clock_initial = 0b0000011111
+            C_shift_clock_initial = Const(0b0000011111)
+            shift_clock = Signal(10, reset=shift_clock_initial)
 
-        shift_clock_initial = 0b0000011111
-        C_shift_clock_initial = Const(0b0000011111)
-        shift_clock = Signal(10, reset=shift_clock_initial)
+            shift_red   = Signal(10)
+            shift_green = Signal(10)
+            shift_blue  = Signal(10)
+            
+            latched_red   = Signal(10)
+            latched_green = Signal(10)
+            latched_blue  = Signal(10)
+            m.d.sync += latched_red.eq(encoded_red)
+            m.d.sync += latched_green.eq(encoded_green)
+            m.d.sync += latched_blue.eq(encoded_blue)
 
-        shift_red   = Signal(10)
-        shift_green = Signal(10)
-        shift_blue  = Signal(10)
-        
-        latched_red   = Signal(10)
-        latched_green = Signal(10)
-        latched_blue  = Signal(10)
-        m.d.sync += latched_red.eq(encoded_red)
-        m.d.sync += latched_green.eq(encoded_green)
-        m.d.sync += latched_blue.eq(encoded_blue)
+            m.d.comb += [
+                self.out_r.eq(shift_red[:xdr]),
+                self.out_g.eq(shift_green[:xdr]),
+                self.out_b.eq(shift_blue[:xdr]),
+                self.out_clock.eq(shift_clock[:xdr])
+            ]
 
-        m.d.comb += [
-            self.out_r.eq(shift_red[:xdr]),
-            self.out_g.eq(shift_green[:xdr]),
-            self.out_b.eq(shift_blue[:xdr]),
-            self.out_clock.eq(shift_clock[:xdr])
-        ]
+            with m.If(shift_clock[4:6] == C_shift_clock_initial[4:6]):
+                m.d.shift += shift_red.eq(latched_red)
+                m.d.shift += shift_green.eq(latched_green)
+                m.d.shift += shift_blue.eq(latched_blue)
+            with m.Else():
+                m.d.shift += shift_red.eq(Cat(shift_red[xdr:], 0))
+                m.d.shift += shift_green.eq(Cat(shift_green[xdr:], 0))
+                m.d.shift += shift_blue.eq(Cat(shift_blue[xdr:], 0))
+            
 
-        with m.If(shift_clock[4:6] == C_shift_clock_initial[4:6]):
-            m.d.shift += shift_red.eq(latched_red)
-            m.d.shift += shift_green.eq(latched_green)
-            m.d.shift += shift_blue.eq(latched_blue)
-        with m.Else():
-            m.d.shift += shift_red.eq(Cat(shift_red[xdr:], 0))
-            m.d.shift += shift_green.eq(Cat(shift_green[xdr:], 0))
-            m.d.shift += shift_blue.eq(Cat(shift_blue[xdr:], 0))
-        
+            m.d.shift += shift_clock.eq(Cat(shift_clock[xdr:], shift_clock[:xdr]))
 
-        m.d.shift += shift_clock.eq(Cat(shift_clock[xdr:], shift_clock[:xdr]))
+        else:
+            #xdr==4
+            encoded_red = Signal(10)
+            encoded_green = Signal(10)
+            encoded_blue = Signal(10)
+
+            encoded_red_r = Signal(10)
+            encoded_green_r = Signal(10)
+            encoded_blue_r = Signal(10)
+
+            m.submodules.tmds_r = tmds_r = TMDSEncoder(data=self.in_r, c=c_red,   blank=self.in_blank, encoded=encoded_red)
+            m.submodules.tmds_g = tmds_g = TMDSEncoder(data=self.in_g, c=c_green, blank=self.in_blank, encoded=encoded_green)
+            m.submodules.tmds_b = tmds_b = TMDSEncoder(data=self.in_b, c=c_blue,  blank=self.in_blank, encoded=encoded_blue)
+
+            shift_clock_initial = 0b00000111110000011111
+            C_shift_clock_initial = Const(shift_clock_initial)
+            shift_clock = Signal(20, reset=shift_clock_initial)
+
+            shift_red   = Signal(20)
+            shift_green = Signal(20)
+            shift_blue  = Signal(20)
+            
+            latched_red   = Signal(20)
+            latched_green = Signal(20)
+            latched_blue  = Signal(20)
+
+            # encoded_r <= encoded on posedge of the pixel clock
+            m.d.sync += encoded_red_r.eq(encoded_red)
+            m.d.sync += encoded_green_r.eq(encoded_green)
+            m.d.sync += encoded_blue_r.eq(encoded_blue)
+
+            # latched_red <= {encoded_red, encoded_red_r} on every 2nd posedge pixel clock
+            latch_clock = Signal()
+            m.d.sync += latch_clock.eq(~latch_clock)
+            with m.If(latch_clock):
+                m.d.sync += latched_red.eq(Cat(encoded_red_r, encoded_red))
+                m.d.sync += latched_green.eq(Cat(encoded_green_r, encoded_green))
+                m.d.sync += latched_blue.eq(Cat(encoded_blue_r, encoded_blue))
+
+            m.d.comb += [
+                self.out_r.eq(shift_red[:xdr]),
+                self.out_g.eq(shift_green[:xdr]),
+                self.out_b.eq(shift_blue[:xdr]),
+                self.out_clock.eq(shift_clock[:xdr])
+            ]
+
+            with m.If(shift_clock[4:6] == C_shift_clock_initial[4:6]):
+                m.d.shift += shift_red.eq(latched_red)
+                m.d.shift += shift_green.eq(latched_green)
+                m.d.shift += shift_blue.eq(latched_blue)
+            with m.Else():
+                m.d.shift += shift_red.eq(Cat(shift_red[xdr:], 0))
+                m.d.shift += shift_green.eq(Cat(shift_green[xdr:], 0))
+                m.d.shift += shift_blue.eq(Cat(shift_blue[xdr:], 0))
+
+            m.d.shift += shift_clock.eq(Cat(shift_clock[xdr:], shift_clock[:xdr]))
 
         return m
 

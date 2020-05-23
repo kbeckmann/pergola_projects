@@ -31,10 +31,24 @@ class HDMISignalGeneratorXDR(Elaboratable):
             ECP5PLLConfig("clk100", 100),
         ])
 
-        m.submodules.pll2 = ECP5PLL([
-            ECP5PLLConfig("shift", self.pixel_freq_mhz * 10. / self.xdr),
-            ECP5PLLConfig("sync", self.pixel_freq_mhz),
-        ], clock_signal_name="clk100", clock_signal_freq=100e6)
+        if xdr == 1:
+            pll_config = [
+                ECP5PLLConfig("shift", self.pixel_freq_mhz * 10),
+                ECP5PLLConfig("sync", self.pixel_freq_mhz),
+            ]
+        elif xdr == 2:
+            pll_config = [
+                ECP5PLLConfig("shift", self.pixel_freq_mhz * 10 / 2),
+                ECP5PLLConfig("sync", self.pixel_freq_mhz),
+            ]
+        elif xdr == 4:
+            pll_config = [
+                ECP5PLLConfig("shift_x2", self.pixel_freq_mhz * 10 / 2),
+                ECP5PLLConfig("shift", self.pixel_freq_mhz * 10 / 2 / 2),
+                ECP5PLLConfig("sync", self.pixel_freq_mhz),
+            ]
+
+        m.submodules.pll2 = ECP5PLL(pll_config, clock_signal_name="clk100", clock_signal_freq=100e6)
 
         vga_output = Record([
             ('hs', 1),
@@ -96,6 +110,22 @@ class HDMISignalGeneratorXDR(Elaboratable):
                 self.hdmi_out.o0.eq(Cat(pixel_b_r[0], pixel_g_r[0], pixel_r_r[0])),
                 self.hdmi_out.o1.eq(Cat(pixel_b_r[1], pixel_g_r[1], pixel_r_r[1])),
             ]
+        elif xdr == 4:
+            m.d.comb += [
+                self.hdmi_out_clk.o_clk.eq(ClockSignal("shift")),
+                self.hdmi_out_clk.o_eclk.eq(ClockSignal("shift_x2")),
+                self.hdmi_out_clk.o0.eq(pixel_clk_r[0]),
+                self.hdmi_out_clk.o1.eq(pixel_clk_r[1]),
+                self.hdmi_out_clk.o2.eq(pixel_clk_r[2]),
+                self.hdmi_out_clk.o3.eq(pixel_clk_r[3]),
+
+                self.hdmi_out.o_clk.eq(ClockSignal("shift")),
+                self.hdmi_out.o_eclk.eq(ClockSignal("shift_x2")),
+                self.hdmi_out.o0.eq(Cat(pixel_b_r[0], pixel_g_r[0], pixel_r_r[0])),
+                self.hdmi_out.o1.eq(Cat(pixel_b_r[1], pixel_g_r[1], pixel_r_r[1])),
+                self.hdmi_out.o2.eq(Cat(pixel_b_r[2], pixel_g_r[2], pixel_r_r[2])),
+                self.hdmi_out.o3.eq(Cat(pixel_b_r[3], pixel_g_r[3], pixel_r_r[3])),
+            ]
 
         # Test image generator
         frame = Signal(16)
@@ -147,7 +177,7 @@ hdmi_configs = {
             v_active=480,
         ), 25),
 
-    # TODO: This breaks at 75MHz, but works at 74 and 76. why?
+    # TODO: This breaks at 75MHz, but works at 74. why?
     "1280x720p60": HDMIParameters(VGAParameters(
             h_front=82,
             h_sync=80,
@@ -170,6 +200,18 @@ hdmi_configs = {
             v_active=720,
         ), 75),
 
+    # TODO: This breaks at 75MHz, but works at 74 and 76. why?
+    "1920x1080p30": HDMIParameters(VGAParameters(
+            h_front=88,
+            h_sync=44,
+            h_back=148,
+            h_active=1920,
+            v_front=4,
+            v_sync=5,
+            v_back=36,
+            v_active=1080,
+        ), 76),
+
     "1920x1080p60": HDMIParameters(VGAParameters(
             h_front=88,
             h_sync=44,
@@ -179,7 +221,7 @@ hdmi_configs = {
             v_sync=5,
             v_back=36,
             v_active=1080,
-        ), 76)
+        ), 150),
 }
 
 class HDMIApplet(Applet, applet_name="hdmi"):
