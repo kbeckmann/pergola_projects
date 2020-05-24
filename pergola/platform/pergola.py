@@ -39,6 +39,12 @@ class PergolaPlatform(LatticeECP5Platform):
             cs="A2", clk="A4", mosi="A5", miso="B3", wp="B4", hold="A3",
             attrs=Attrs(IO_TYPE="LVCMOS33")
         ),
+
+        Resource("pmod", 0, Pins("P2  L1  J2  H2       N1  L2  J1  G1 ")), # PMOD1
+        Resource("pmod", 1, Pins("G2  E2  C1  B1       F1  D1  C2  B2 ")), # PMOD2
+        Resource("pmod", 2, Pins("D4  C6  B7  C7       C4  B6  A7  A8 ")), # PMOD3
+        Resource("pmod", 3, Pins("B11 B12 B13 B14      A12 A13 A14 A15")), # PMOD4
+        Resource("pmod", 4, Pins("F16 G16 J16 L16      G15 H15 J15 L15")), # PMOD5
     ]
     connectors = [
         Connector("pmod", 0, "P2  L1  J2  H2       N1  L2  J1  G1 "), # PMOD1

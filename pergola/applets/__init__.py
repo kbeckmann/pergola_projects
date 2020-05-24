@@ -40,3 +40,4 @@ from . import xdr
 from . import hdmi
 from . import hdmi_splitter
 from . import pll
+from . import radio_tx
