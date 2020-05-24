@@ -113,6 +113,10 @@ class HDMISignalGeneratorXDR(Elaboratable):
         )
 
         # Store output bits in separate registers
+        #
+        # Also node that pixel_clk, pixel_r, pixel_g are inverted.
+        # This is because on PMOD1 on the Pergola board, they are routed
+        # this way.
         pixel_clk_r = Signal(xdr)
         pixel_r_r = Signal(xdr)
         pixel_g_r = Signal(xdr)
