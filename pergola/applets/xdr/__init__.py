@@ -12,16 +12,11 @@ class DDRExampleApplet(Applet, applet_name="xdr"):
     @classmethod
     def add_run_arguments(cls, parser):
         parser.add_argument(
-            "--xdr", default=1, type=int, choices=[2, 4, 7],
+            "--xdr", default=2, type=int, choices=[2, 4, 7],
             help="ddr=2, ddrx2=4, ddrx7=7")
-
-        parser.add_argument(
-            "--fast", default=0, action="count",
-            help="Directly tie output to led")
 
     def __init__(self, args):
         self.xdr = args.xdr
-        self.fast = args.fast
 
     def elaborate(self, platform):
 
