@@ -42,11 +42,30 @@ class HDMISignalGeneratorXDR(Elaboratable):
                 ECP5PLLConfig("sync", self.pixel_freq_mhz),
             ]
         elif xdr == 4:
-            pll_config = [
-                ECP5PLLConfig("shift_x2", self.pixel_freq_mhz * 10 / 2),
-                ECP5PLLConfig("shift", self.pixel_freq_mhz * 10 / 2 / 2),
-                ECP5PLLConfig("sync", self.pixel_freq_mhz),
-            ]
+            if True:
+                pll_config = [
+                    ECP5PLLConfig("shift_x2", self.pixel_freq_mhz * 10 / 2),
+                    ECP5PLLConfig("shift", self.pixel_freq_mhz * 10 / 2 / 2),
+                    ECP5PLLConfig("sync", self.pixel_freq_mhz),
+                ]
+            else:
+                # Generate sclk(shift) from eclk(shift_x2)
+                # This unfortunately reduces timing of the shift_x2 from 400 to 350 MHz or so
+                pll_config = [
+                    ECP5PLLConfig("shift_x2", self.pixel_freq_mhz * 10 / 2),
+                    ECP5PLLConfig("sync", self.pixel_freq_mhz),
+                ]
+                shift_clk = Signal()
+                m.domains += ClockDomain("shift")
+                m.submodules.clkdiv2 = Instance("CLKDIVF",
+                    i_CLKI=ClockSignal("shift_x2"),
+                    i_RST=0,
+                    i_ALIGNWD=0,
+
+                    o_CDIVX=ClockSignal(domain="shift"),
+
+                    p_DIV=2.0
+                )
 
         m.submodules.pll2 = ECP5PLL(pll_config, clock_signal_name="clk100", clock_signal_freq=100e6)
 
@@ -222,6 +241,17 @@ hdmi_configs = {
             v_back=36,
             v_active=1080,
         ), 150),
+
+    "2560x1440p30": HDMIParameters(VGAParameters(
+            h_front=88,
+            h_sync=44,
+            h_back=50,
+            h_active=2560,
+            v_front=4,
+            v_sync=5,
+            v_back=36,
+            v_active=1440,
+        ), 122),
 }
 
 class HDMIApplet(Applet, applet_name="hdmi"):
