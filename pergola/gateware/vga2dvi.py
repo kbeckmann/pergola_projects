@@ -140,8 +140,7 @@ class VGA2DVI(Elaboratable):
 
             m.d.shift += shift_clock.eq(Cat(shift_clock[xdr:], shift_clock[:xdr]))
 
-        else:
-            #xdr==4
+        elif xdr == 4:
             encoded_red = Signal(10)
             encoded_green = Signal(10)
             encoded_blue = Signal(10)
@@ -178,6 +177,59 @@ class VGA2DVI(Elaboratable):
                 m.d.sync += latched_red.eq(Cat(encoded_red_r, encoded_red))
                 m.d.sync += latched_green.eq(Cat(encoded_green_r, encoded_green))
                 m.d.sync += latched_blue.eq(Cat(encoded_blue_r, encoded_blue))
+
+            m.d.comb += [
+                self.out_r.eq(shift_red[:xdr]),
+                self.out_g.eq(shift_green[:xdr]),
+                self.out_b.eq(shift_blue[:xdr]),
+                self.out_clock.eq(shift_clock[:xdr])
+            ]
+
+            with m.If(shift_clock[4:6] == C_shift_clock_initial[4:6]):
+                m.d.shift += shift_red.eq(latched_red)
+                m.d.shift += shift_green.eq(latched_green)
+                m.d.shift += shift_blue.eq(latched_blue)
+            with m.Else():
+                m.d.shift += shift_red.eq(Cat(shift_red[xdr:], 0))
+                m.d.shift += shift_green.eq(Cat(shift_green[xdr:], 0))
+                m.d.shift += shift_blue.eq(Cat(shift_blue[xdr:], 0))
+
+            m.d.shift += shift_clock.eq(Cat(shift_clock[xdr:], shift_clock[:xdr]))
+
+        elif xdr == 7:
+            # Don't actually use this, this wastes a lot of LUTs.
+
+            encoded_red = Signal(10)
+            encoded_green = Signal(10)
+            encoded_blue = Signal(10)
+
+            encoded_red_r = Signal(70)
+            encoded_green_r = Signal(70)
+            encoded_blue_r = Signal(70)
+
+            m.submodules.tmds_r = tmds_r = TMDSEncoder(data=self.in_r, c=c_red,   blank=self.in_blank, encoded=encoded_red)
+            m.submodules.tmds_g = tmds_g = TMDSEncoder(data=self.in_g, c=c_green, blank=self.in_blank, encoded=encoded_green)
+            m.submodules.tmds_b = tmds_b = TMDSEncoder(data=self.in_b, c=c_blue,  blank=self.in_blank, encoded=encoded_blue)
+
+            shift_clock_initial = 0b0000011111000001111100000111110000011111000001111100000111110000011111
+            C_shift_clock_initial = Const(shift_clock_initial)
+            shift_clock = Signal(70, reset=shift_clock_initial)
+
+            shift_red   = Signal(70)
+            shift_green = Signal(70)
+            shift_blue  = Signal(70)
+            
+            latched_red   = Signal(70)
+            latched_green = Signal(70)
+            latched_blue  = Signal(70)
+
+            m.d.sync += encoded_red_r.eq(Cat(encoded_red_r[10:], encoded_red))
+            m.d.sync += encoded_green_r.eq(Cat(encoded_green_r[10:], encoded_green))
+            m.d.sync += encoded_blue_r.eq(Cat(encoded_blue_r[10:], encoded_blue))
+
+            m.d.sync += latched_red.eq(Cat(encoded_red_r))
+            m.d.sync += latched_green.eq(Cat(encoded_green_r))
+            m.d.sync += latched_blue.eq(Cat(encoded_blue_r))
 
             m.d.comb += [
                 self.out_r.eq(shift_red[:xdr]),

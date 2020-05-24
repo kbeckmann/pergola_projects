@@ -66,6 +66,13 @@ class HDMISignalGeneratorXDR(Elaboratable):
 
                     p_DIV=2.0
                 )
+        elif xdr == 7:
+            if True:
+                pll_config = [
+                    ECP5PLLConfig("shift_x2", self.pixel_freq_mhz * 10 / 2),
+                    ECP5PLLConfig("shift", self.pixel_freq_mhz * 10 / 2. / 3.5),
+                    ECP5PLLConfig("sync", self.pixel_freq_mhz),
+                ]
 
         m.submodules.pll2 = ECP5PLL(pll_config, clock_signal_name="clk100", clock_signal_freq=100e6)
 
@@ -145,6 +152,29 @@ class HDMISignalGeneratorXDR(Elaboratable):
                 self.hdmi_out.o2.eq(Cat(pixel_b_r[2], pixel_g_r[2], pixel_r_r[2])),
                 self.hdmi_out.o3.eq(Cat(pixel_b_r[3], pixel_g_r[3], pixel_r_r[3])),
             ]
+        elif xdr == 7:
+            m.d.comb += [
+                self.hdmi_out_clk.o_clk.eq(ClockSignal("shift")),
+                self.hdmi_out_clk.o_eclk.eq(ClockSignal("shift_x2")),
+                self.hdmi_out_clk.o0.eq(pixel_clk_r[0]),
+                self.hdmi_out_clk.o1.eq(pixel_clk_r[1]),
+                self.hdmi_out_clk.o2.eq(pixel_clk_r[2]),
+                self.hdmi_out_clk.o3.eq(pixel_clk_r[3]),
+                self.hdmi_out_clk.o4.eq(pixel_clk_r[4]),
+                self.hdmi_out_clk.o5.eq(pixel_clk_r[5]),
+                self.hdmi_out_clk.o6.eq(pixel_clk_r[6]),
+
+                self.hdmi_out.o_clk.eq(ClockSignal("shift")),
+                self.hdmi_out.o_eclk.eq(ClockSignal("shift_x2")),
+                self.hdmi_out.o0.eq(Cat(pixel_b_r[0], pixel_g_r[0], pixel_r_r[0])),
+                self.hdmi_out.o1.eq(Cat(pixel_b_r[1], pixel_g_r[1], pixel_r_r[1])),
+                self.hdmi_out.o2.eq(Cat(pixel_b_r[2], pixel_g_r[2], pixel_r_r[2])),
+                self.hdmi_out.o3.eq(Cat(pixel_b_r[3], pixel_g_r[3], pixel_r_r[3])),
+                self.hdmi_out.o4.eq(Cat(pixel_b_r[4], pixel_g_r[4], pixel_r_r[4])),
+                self.hdmi_out.o5.eq(Cat(pixel_b_r[5], pixel_g_r[5], pixel_r_r[5])),
+                self.hdmi_out.o6.eq(Cat(pixel_b_r[6], pixel_g_r[6], pixel_r_r[6])),
+            ]
+
 
         # Test image generator
         frame = Signal(16)
@@ -200,6 +230,18 @@ hdmi_configs = {
             v_active=480,
         ), 25),
 
+    # This uses a clock that is compatible with xdr=7
+    "640x480p60_7": HDMIParameters(VGAParameters(
+            h_front=16,
+            h_sync=96,
+            h_back=44,
+            h_active=640,
+            v_front=10,
+            v_sync=2,
+            v_back=31,
+            v_active=480,
+        ), 28),
+
     "1280x720p60": HDMIParameters(VGAParameters(
             h_front=82,
             h_sync=80,
@@ -211,6 +253,18 @@ hdmi_configs = {
             v_active=720,
         ), 74),
 
+    # This uses a clock that is compatible with xdr=7
+    "1280x720p60_7": HDMIParameters(VGAParameters(
+            h_front=82,
+            h_sync=80,
+            h_back=202,
+            h_active=1280,
+            v_front=3,
+            v_sync=5,
+            v_back=22,
+            v_active=720,
+        ), 70),
+
     "1920x1080p30": HDMIParameters(VGAParameters(
             h_front=80,
             h_sync=44,
@@ -221,6 +275,18 @@ hdmi_configs = {
             v_back=36,
             v_active=1080,
         ), 74),
+
+    # This uses a clock that is compatible with xdr=7
+    "1920x1080p30_7": HDMIParameters(VGAParameters(
+            h_front=100,
+            h_sync=44,
+            h_back=215,
+            h_active=1920,
+            v_front=4,
+            v_sync=5,
+            v_back=36,
+            v_active=1080,
+        ), 77),
 
     "1920x1080p60": HDMIParameters(VGAParameters(
             h_front=109,
@@ -246,14 +312,26 @@ hdmi_configs = {
 }
 
 class HDMIApplet(Applet, applet_name="hdmi"):
-    description = "HDMI source"
-    help = "HDMI source"
+    help = "HDMI/DVID signal generator"
+    description = """
+    HDMI/DVID signal generator
+
+    Can use SDR, DDR, DDRx2, DDRx7:1 to serialize the output.
+
+    DDRx7:1 was made just to see if it works - it does, but it's really not a 
+    good fit because of the odd ratio 7:1.
+
+    1920x1080p60 can be achieved with DDRx2, however it violates the timings of
+    the I/O blocks. But it works!
+
+    """
 
     @classmethod
     def add_run_arguments(cls, parser):
         parser.add_argument(
-            "--xdr", default=1, type=int, choices=[1, 2, 4],
-            help="Use sdr=1/ddr=2/qdr=4")
+            "--xdr", default=1, type=int, choices=[1, 2, 4, 7],
+            help="sdr=1, ddr=2, ddrx2=4, ddrx7=7")
+
         parser.add_argument(
             "--config", choices=hdmi_configs.keys(), required=True,
             help="Set resolution and pixel clock")
