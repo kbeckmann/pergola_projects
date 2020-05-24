@@ -153,6 +153,10 @@ class HDMISignalGeneratorXDR(Elaboratable):
         with m.If(~vsync_r & vga_output.vs):
             m.d.sync += frame.eq(frame + 1)
 
+        # Blink an LED for each frame
+        led = platform.request("led", 0)
+        m.d.comb += led.eq(frame[0])
+
         frame_tri = Mux(frame[8], ~frame[:8], frame[:8])
         frame_tri2 = Mux(frame[9], ~frame[1:9], frame[1:9])
 
@@ -196,11 +200,10 @@ hdmi_configs = {
             v_active=480,
         ), 25),
 
-    # TODO: This breaks at 75MHz, but works at 74. why?
     "1280x720p60": HDMIParameters(VGAParameters(
             h_front=82,
             h_sync=80,
-            h_back=216,
+            h_back=202,
             h_active=1280,
             v_front=3,
             v_sync=5,
@@ -208,20 +211,8 @@ hdmi_configs = {
             v_active=720,
         ), 74),
 
-    "1280x720p71": HDMIParameters(VGAParameters(
-            h_front=40,
-            h_sync=40,
-            h_back=40,
-            h_active=1280,
-            v_front=3,
-            v_sync=5,
-            v_back=30,
-            v_active=720,
-        ), 75),
-
-    # TODO: This breaks at 75MHz, but works at 74 and 76. why?
     "1920x1080p30": HDMIParameters(VGAParameters(
-            h_front=88,
+            h_front=80,
             h_sync=44,
             h_back=148,
             h_active=1920,
@@ -229,10 +220,10 @@ hdmi_configs = {
             v_sync=5,
             v_back=36,
             v_active=1080,
-        ), 76),
+        ), 74),
 
     "1920x1080p60": HDMIParameters(VGAParameters(
-            h_front=88,
+            h_front=109,
             h_sync=44,
             h_back=148,
             h_active=1920,
@@ -243,7 +234,7 @@ hdmi_configs = {
         ), 150),
 
     "2560x1440p30": HDMIParameters(VGAParameters(
-            h_front=88,
+            h_front=83,
             h_sync=44,
             h_back=50,
             h_active=2560,
