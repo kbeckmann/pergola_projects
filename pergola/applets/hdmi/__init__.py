@@ -15,10 +15,11 @@ from ...gateware.vga2dvi import VGA2DVI
 
 
 class HDMISignalGeneratorXDR(Elaboratable):
-    def __init__(self, hdmi_out_clk, hdmi_out, vga_parameters, pixel_freq_mhz, xdr=1):
+    def __init__(self, hdmi_out_clk, hdmi_out, vga_parameters, pll1_freq_mhz, pixel_freq_mhz, xdr=1):
         self.hdmi_out_clk = hdmi_out_clk
         self.hdmi_out = hdmi_out
         self.vga_parameters = vga_parameters
+        self.pll1_freq_mhz = pll1_freq_mhz
         self.pixel_freq_mhz = pixel_freq_mhz
         self.xdr = xdr
 
@@ -28,7 +29,7 @@ class HDMISignalGeneratorXDR(Elaboratable):
         xdr = self.xdr
 
         m.submodules.pll1 = ECP5PLL([
-            ECP5PLLConfig("clk100", 100),
+            ECP5PLLConfig("clk_pll1", self.pll1_freq_mhz),
         ])
 
         if xdr == 1:
@@ -74,7 +75,7 @@ class HDMISignalGeneratorXDR(Elaboratable):
                     ECP5PLLConfig("sync", self.pixel_freq_mhz),
                 ]
 
-        m.submodules.pll2 = ECP5PLL(pll_config, clock_signal_name="clk100", clock_signal_freq=100e6)
+        m.submodules.pll2 = ECP5PLL(pll_config, clock_signal_name="clk_pll1", clock_signal_freq=self.pll1_freq_mhz*1e6)
 
         vga_output = Record([
             ('hs', 1),
@@ -211,12 +212,16 @@ class HDMISignalGeneratorXDR(Elaboratable):
 
 
 class HDMIParameters():
-    def __init__(self, vga_parameters, pixel_freq_mhz):
+    def __init__(self, vga_parameters, pll1_freq_mhz, pixel_freq_mhz):
         self.vga_parameters = vga_parameters
+        self.pll1_freq_mhz = pll1_freq_mhz
         self.pixel_freq_mhz = pixel_freq_mhz
 
     def __repr__(self):
-        return "(HDMIParameters ({}) {})".format(self.vga_parameters, self.pixel_freq_mhz)
+        return "(HDMIParameters ({}) {})".format(
+            self.vga_parameters,
+            self.pll1_freq_mhz,
+            self.pixel_freq_mhz)
 
 hdmi_configs = {
     "640x480p60": HDMIParameters(VGAParameters(
@@ -228,7 +233,7 @@ hdmi_configs = {
             v_sync=2,
             v_back=31,
             v_active=480,
-        ), 25),
+        ), 100, 25),
 
     # This uses a clock that is compatible with xdr=7
     "640x480p60_7": HDMIParameters(VGAParameters(
@@ -240,7 +245,7 @@ hdmi_configs = {
             v_sync=2,
             v_back=31,
             v_active=480,
-        ), 28),
+        ), 100, 28),
 
     "1280x720p60": HDMIParameters(VGAParameters(
             h_front=82,
@@ -251,7 +256,7 @@ hdmi_configs = {
             v_sync=5,
             v_back=22,
             v_active=720,
-        ), 74),
+        ), 100, 74),
 
     # This uses a clock that is compatible with xdr=7
     "1280x720p60_7": HDMIParameters(VGAParameters(
@@ -263,7 +268,7 @@ hdmi_configs = {
             v_sync=5,
             v_back=22,
             v_active=720,
-        ), 70),
+        ), 100, 70),
 
     "1920x1080p30": HDMIParameters(VGAParameters(
             h_front=80,
@@ -274,7 +279,7 @@ hdmi_configs = {
             v_sync=5,
             v_back=36,
             v_active=1080,
-        ), 74),
+        ), 100, 74),
 
     # This uses a clock that is compatible with xdr=7
     "1920x1080p30_7": HDMIParameters(VGAParameters(
@@ -286,7 +291,7 @@ hdmi_configs = {
             v_sync=5,
             v_back=36,
             v_active=1080,
-        ), 77),
+        ), 100, 77),
 
     "1920x1080p60": HDMIParameters(VGAParameters(
             h_front=109,
@@ -297,7 +302,7 @@ hdmi_configs = {
             v_sync=5,
             v_back=36,
             v_active=1080,
-        ), 150),
+        ), 100, 150),
 
     "2560x1440p30": HDMIParameters(VGAParameters(
             h_front=83,
@@ -308,7 +313,7 @@ hdmi_configs = {
             v_sync=5,
             v_back=36,
             v_active=1440,
-        ), 122),
+        ), 100, 122),
 }
 
 class HDMIApplet(Applet, applet_name="hdmi"):
@@ -361,6 +366,7 @@ class HDMIApplet(Applet, applet_name="hdmi"):
             hdmi_out_clk=hdmi_out_clk,
             hdmi_out=hdmi_out,
             vga_parameters=hdmi_config.vga_parameters,
+            pll1_freq_mhz=hdmi_config.pll1_freq_mhz,
             pixel_freq_mhz=hdmi_config.pixel_freq_mhz,
             xdr=xdr)
 
