@@ -1,5 +1,4 @@
 from nmigen import *
-from nmigen_boards.pergola import *
 from sys import float_info
 from math import fabs
 
@@ -61,6 +60,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 """
 
+import logging
+logger = logging.getLogger(__name__)
+
 class ECP5PLLConfig():
     def __init__(self, cd_name, freq, phase=0, error=0):
         """
@@ -104,7 +106,9 @@ class ECP5PLL(Elaboratable):
         self.clock_config = clock_config.copy()
 
     def calc_pll_params(self, input, output):
-        assert(self.INPUT_MIN <= input <= self.INPUT_MAX)
+        if (not self.INPUT_MIN <= input <= self.INPUT_MAX):
+            logger.warning("Input clock violates frequency range: {} <= {:.3f} <= {}".format(
+                self.INPUT_MIN, freq, self.INPUT_MAX))
 
         params = {}
         error = float_info.max
@@ -153,20 +157,20 @@ class ECP5PLL(Elaboratable):
         return params
 
     def generate_secondary_output(self, params, channel, output, phase):
-        div = int(params["fvco"] / output)
+        div = int(0.5 + params["fvco"] / output)
         freq = params["fvco"] / div
 
         ns_shift = 1.0 / (freq * 1e6) * phase /  360.0
         phase_count = ns_shift * (params["fvco"] * 1e6)
-        cphase = int(phase_count)
-        fphase = int((phase_count - cphase) * 8)
+        cphase = int(0.5 + phase_count)
+        fphase = int(0.5 + (phase_count - cphase) * 8)
 
         ns_actual = 1.0 / (params["fvco"] * 1e6) * (cphase + fphase / 8.0)
         phase_shift = 360 * ns_actual / (1.0 / (freq * 1e6))
 
         params["secondary"][channel] = {}
         params["secondary"][channel]["enabled"] = True
-        params["secondary"][channel]["div"] = int(div)
+        params["secondary"][channel]["div"] = div
         params["secondary"][channel]["freq"] = freq
         params["secondary"][channel]["freq_requested"] = output
         params["secondary"][channel]["phase"] = phase_shift
@@ -174,7 +178,9 @@ class ECP5PLL(Elaboratable):
         params["secondary"][channel]["fphase"] = fphase
         params["secondary"][channel]["error"] = fabs(freq - output)
 
-        assert(self.OUTPUT_MIN <= freq <= self.OUTPUT_MAX)
+        if (not self.OUTPUT_MIN <= freq <= self.OUTPUT_MAX):
+            logger.warning("ClockDomain {} violates frequency range: {} <= {:.3f} <= {}".format(
+                self.clock_config[channel + 1].cd_name, self.OUTPUT_MIN, freq, self.OUTPUT_MAX))
 
 
     def elaborate(self, platform):
@@ -217,7 +223,7 @@ class ECP5PLL(Elaboratable):
                 params["secondary"][2]
             ]):
             if p["error"] > 0:
-                print("ClockDomain {} has an error of {:.3f} MHz ({} instead of {})"
+                logger.warning("ClockDomain {} has an error of {:.3f} MHz ({} instead of {})"
                     .format(self.clock_config[i].cd_name, p["error"], p["freq"], p["freq_requested"]))
                 assert(p["error"] <= self.clock_config[i].error)
 
