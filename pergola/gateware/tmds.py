@@ -68,9 +68,6 @@ class TMDSEncoder(Elaboratable):
 
         data = self.data
 
-        data_copy = Signal(8)
-        m.d.comb += data_copy.eq(data)
-
         xored = Signal(9)
         m.d.comb += xored.eq(Cat(
             data[0],
