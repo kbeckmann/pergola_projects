@@ -29,9 +29,6 @@ class Applet(Elaboratable):
     help = "applet help missing"
     description = "applet description missing"
 
-    def build(self):
-        self.device.build(self, toolchain_path='/usr/share/trellis')
-
     async def run(self):
         pass
 
