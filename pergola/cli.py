@@ -7,6 +7,11 @@ from .platform.pergola import PergolaPlatform
 
 logger = logging.getLogger(__name__)
 
+def add_common_parsers(parser):
+    parser.add_argument(
+        "--timing-allow-fail", default=0, action="count",
+        help="Allow timing to fail during place and route")
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -20,11 +25,13 @@ def main():
         "run",
         description="Builds and loads an applet bitstream",
         help="builds and loads an applet bitstream")
+    add_common_parsers(p_run)
 
     p_build = subparsers.add_parser(
         "build",
         description="Builds an applet bitstream",
         help="builds an applet bitstream")
+    add_common_parsers(p_build)
 
     p_dot = subparsers.add_parser(
         "dot",
@@ -49,7 +56,7 @@ def main():
     if args.action == "run":
         applet_cls = Applet.all[args.applet]
         platform = PergolaPlatform()
-        platform.build(applet_cls(args=args), do_program=True)
+        platform.build(applet_cls(args=args), do_program=True, nextpnr_opts='--timing-allow-fail' if args.timing_allow_fail else '')
     if args.action == "build":
         applet_cls = Applet.all[args.applet]
         platform = PergolaPlatform()
