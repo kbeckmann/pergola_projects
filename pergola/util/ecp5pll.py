@@ -91,11 +91,12 @@ class ECP5PLL(Elaboratable):
     VCO_MIN = 400.0
     VCO_MAX = 800.0
 
-    def __init__(self, clock_config=None, clock_signal_name=None, clock_signal_freq=None):
+    def __init__(self, clock_config=None, clock_signal_name=None, clock_signal_freq=None, skip_checks=False):
         """
         Parameters:
             clock_config:      Array of ECP5PLLConfig objects. Must have 1 to 4 elements.
             clock_signal_name: Input clock signal name. Uses default clock if not specified.
+            skip_checks:       Skips limit checks and allows out-of-spec usage
         """
         self.clock_name = clock_signal_name
         self.clock_signal_freq = clock_signal_freq
@@ -104,6 +105,7 @@ class ECP5PLL(Elaboratable):
         assert(clock_config[0].phase == 0)
 
         self.clock_config = clock_config.copy()
+        self.skip_checks = skip_checks
 
     def calc_pll_params(self, input, output):
         if (not self.INPUT_MIN <= input <= self.INPUT_MAX):
@@ -122,7 +124,7 @@ class ECP5PLL(Elaboratable):
                 for output_div in range(1, 129):
                     fvco = fpfd * feedback_div * output_div
 
-                    if fvco < self.VCO_MIN or fvco > self.VCO_MAX:
+                    if not self.skip_checks and (fvco < self.VCO_MIN or fvco > self.VCO_MAX):
                         continue
 
                     freq = fvco / output_div
@@ -141,7 +143,8 @@ class ECP5PLL(Elaboratable):
                         ns_phase = 1.0 / (freq * 1e6) * 0.5
                         params["primary_cphase"] = ns_phase * (fvco * 1e6)
 
-        assert(self.OUTPUT_MIN <= freq <= self.OUTPUT_MAX)
+        if not self.skip_checks:
+            assert(self.OUTPUT_MIN <= freq <= self.OUTPUT_MAX)
 
         params["secondary"] = [{
             "div": 0,
@@ -225,7 +228,8 @@ class ECP5PLL(Elaboratable):
             if p["error"] > 0:
                 logger.warning("ClockDomain {} has an error of {:.3f} MHz ({} instead of {})"
                     .format(self.clock_config[i].cd_name, p["error"], p["freq"], p["freq_requested"]))
-                assert(p["error"] <= self.clock_config[i].error)
+                if not self.skip_checks:
+                    assert(p["error"] <= self.clock_config[i].error)
 
         m.submodules.pll = Instance("EHXPLLL",
             # Clock in.
