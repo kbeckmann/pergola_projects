@@ -382,7 +382,7 @@ class HDMIApplet(Applet, applet_name="hdmi"):
 
 class HDMITest(FHDLTestCase):
     '''
-    TODO: Write actual test cases. These are just to generate a waveforms to analyze.
+    TODO: Write actual test cases. These are just to generate waveforms to analyze.
     '''
     def test_hdmi(self):
         output = Record([
