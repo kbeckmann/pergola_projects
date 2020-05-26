@@ -12,13 +12,14 @@ from ...util.ecp5pll import ECP5PLL, ECP5PLLConfig
 
 
 class HDMISignalGeneratorXDR(Elaboratable):
-    def __init__(self, hdmi_out_clk, hdmi_out, vga_parameters, pll1_freq_mhz, pixel_freq_mhz, xdr=1):
+    def __init__(self, hdmi_out_clk, hdmi_out, vga_parameters, pll1_freq_mhz, pixel_freq_mhz, xdr=1, skip_pll_checks=False):
         self.hdmi_out_clk = hdmi_out_clk
         self.hdmi_out = hdmi_out
         self.vga_parameters = vga_parameters
         self.pll1_freq_mhz = pll1_freq_mhz
         self.pixel_freq_mhz = pixel_freq_mhz
         self.xdr = xdr
+        self.skip_pll_checks = skip_pll_checks
 
     def elaborate(self, platform):
         m = Module()
@@ -27,7 +28,7 @@ class HDMISignalGeneratorXDR(Elaboratable):
 
         m.submodules.pll1 = ECP5PLL([
             ECP5PLLConfig("clk_pll1", self.pll1_freq_mhz),
-        ])
+        ], skip_checks=self.skip_pll_checks)
 
         if xdr == 1:
             pll_config = [
@@ -72,7 +73,11 @@ class HDMISignalGeneratorXDR(Elaboratable):
                     ECP5PLLConfig("sync", self.pixel_freq_mhz),
                 ]
 
-        m.submodules.pll2 = ECP5PLL(pll_config, clock_signal_name="clk_pll1", clock_signal_freq=self.pll1_freq_mhz*1e6)
+        m.submodules.pll2 = ECP5PLL(
+            pll_config,
+            clock_signal_name="clk_pll1",
+            clock_signal_freq=self.pll1_freq_mhz * 1e6,
+            skip_checks=self.skip_pll_checks)
 
         vga_output = Record([
             ('hs', 1),
@@ -322,15 +327,27 @@ hdmi_configs = {
         ), 100, 150),
 
     "2560x1440p30": HDMIParameters(VGAParameters(
-            h_front=83,
-            h_sync=44,
-            h_back=50,
+            h_front=48,
+            h_sync=32,
+            h_back=80,
             h_active=2560,
-            v_front=4,
+            v_front=3,
             v_sync=5,
-            v_back=36,
+            v_back=33,
             v_active=1440,
         ), 100, 122),
+
+    # Actually runs at ~52Hz but it works..! Possible to get it to ~57 but with glitches.
+    "2560x1440p60": HDMIParameters(VGAParameters(
+            h_front=48,
+            h_sync=32,
+            h_back=80,
+            h_active=2560,
+            v_front=3,
+            v_sync=5,
+            v_back=33,
+            v_active=1440,
+        ), 100, 210),
 }
 
 class HDMIApplet(Applet, applet_name="hdmi"):
@@ -358,9 +375,14 @@ class HDMIApplet(Applet, applet_name="hdmi"):
             "--config", choices=hdmi_configs.keys(), required=True,
             help="Set resolution and pixel clock")
 
+        parser.add_argument(
+            "--skip-pll-checks", default=0, action="count",
+            help="Allow PLL to be configured out of spec")
+
     def __init__(self, args):
         self.xdr = args.xdr
         self.hdmi_config = args.config
+        self.skip_pll_checks = args.skip_pll_checks
 
     def elaborate(self, platform):
 
@@ -385,7 +407,8 @@ class HDMIApplet(Applet, applet_name="hdmi"):
             vga_parameters=hdmi_config.vga_parameters,
             pll1_freq_mhz=hdmi_config.pll1_freq_mhz,
             pixel_freq_mhz=hdmi_config.pixel_freq_mhz,
-            xdr=xdr)
+            xdr=xdr,
+            skip_pll_checks=self.skip_pll_checks)
 
         return m
 
