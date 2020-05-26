@@ -1,17 +1,14 @@
 from nmigen import *
 from nmigen.lib.cdc import FFSynchronizer
 from nmigen.back.pysim import Simulator, Active
-from nmigen.hdl.rec import DIR_FANIN, DIR_FANOUT, DIR_NONE
 from nmigen.test.utils import FHDLTestCase
 from nmigen.asserts import *
 from nmigen.build.dsl import *
-from nmigen.build.res import ResourceManager
 
 from .. import Applet
-from ...util.ecp5pll import ECP5PLL, ECP5PLLConfig
-
 from ...gateware.vga import VGAOutput, VGAOutputSubtarget, VGAParameters
 from ...gateware.vga2dvi import VGA2DVI
+from ...util.ecp5pll import ECP5PLL, ECP5PLLConfig
 
 
 class HDMISignalGeneratorXDR(Elaboratable):
@@ -87,6 +84,22 @@ class HDMISignalGeneratorXDR(Elaboratable):
         g = Signal(8)
         b = Signal(8)
 
+        r_r = Signal(8)
+        g_r = Signal(8)
+        b_r = Signal(8)
+
+        blank_r = Signal()
+        hs_r = Signal()
+        vs_r = Signal()
+
+        m.submodules += FFSynchronizer(r, r_r, o_domain="sync", stages=3)
+        m.submodules += FFSynchronizer(g, g_r, o_domain="sync", stages=3)
+        m.submodules += FFSynchronizer(b, b_r, o_domain="sync", stages=3)
+
+        m.submodules += FFSynchronizer(vga_output.blank, blank_r, o_domain="sync", stages=5)
+        m.submodules += FFSynchronizer(vga_output.hs, hs_r, o_domain="sync", stages=5)
+        m.submodules += FFSynchronizer(vga_output.vs, vs_r, o_domain="sync", stages=5)
+
         pixel_r = Signal(xdr)
         pixel_g = Signal(xdr)
         pixel_b = Signal(xdr)
@@ -99,12 +112,12 @@ class HDMISignalGeneratorXDR(Elaboratable):
         )
 
         m.submodules.vga2dvi = VGA2DVI(
-            in_r = r,
-            in_g = g,
-            in_b = b,
-            in_blank = vga_output.blank,
-            in_hsync = vga_output.hs,
-            in_vsync = vga_output.vs,
+            in_r = r_r,
+            in_g = g_r,
+            in_b = b_r,
+            in_blank = blank_r,
+            in_hsync = hs_r,
+            in_vsync = vs_r,
             out_r = pixel_r,
             out_g = pixel_g,
             out_b = pixel_b,
