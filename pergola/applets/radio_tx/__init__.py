@@ -79,7 +79,7 @@ class RadioTXApplet(Applet, applet_name="radio-tx"):
         m.d.sync += pdm.eq(pdm[:-1] + pdm_in)
 
         if self.file:
-            samples_raw = [(127 + x) % 256 for x in open(self.file, "rb").read()]
+            samples_raw = [(128 + x) % 256 for x in open(self.file, "rb").read()]
             samples = Memory(width=8, depth=len(samples_raw), init=samples_raw)
             m.submodules.samp_rd = samp_rd = samples.read_port(domain="sync", transparent=False)
             samp_rate = self.file_sample_rate
