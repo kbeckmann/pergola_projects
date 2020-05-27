@@ -337,17 +337,19 @@ hdmi_configs = {
             v_active=1440,
         ), 100, 122),
 
-    # Actually runs at ~52Hz but it works..! Possible to get it to ~57 but with glitches.
+    # Generates a 60Hz signal but needs 1.2V on VCC.
+    # Needs a simpler test image to meet timing on the sync/pixel cd.
+    # Can run at 205MHz@1.1V
     "2560x1440p60": HDMIParameters(VGAParameters(
-            h_front=48,
-            h_sync=32,
-            h_back=80,
+            h_front=20,
+            h_sync=20,
+            h_back=20,
             h_active=2560,
             v_front=3,
             v_sync=5,
-            v_back=33,
+            v_back=5,
             v_active=1440,
-        ), 100, 210),
+        ), 100, 228),
 }
 
 class HDMIApplet(Applet, applet_name="hdmi"):
