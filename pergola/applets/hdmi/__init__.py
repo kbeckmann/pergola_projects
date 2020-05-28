@@ -26,6 +26,8 @@ class HDMISignalGeneratorXDR(Elaboratable):
 
         xdr = self.xdr
 
+        gearbox_ratio = 8
+
         m.submodules.pll1 = ECP5PLL([
             ECP5PLLConfig("clk_pll1", self.pll1_freq_mhz),
         ], skip_checks=self.skip_pll_checks)
@@ -34,11 +36,13 @@ class HDMISignalGeneratorXDR(Elaboratable):
             pll_config = [
                 ECP5PLLConfig("shift", self.pixel_freq_mhz * 10),
                 ECP5PLLConfig("sync", self.pixel_freq_mhz),
+                ECP5PLLConfig("slow", self.pixel_freq_mhz / gearbox_ratio),
             ]
         elif xdr == 2:
             pll_config = [
                 ECP5PLLConfig("shift", self.pixel_freq_mhz * 10 / 2),
                 ECP5PLLConfig("sync", self.pixel_freq_mhz),
+                ECP5PLLConfig("slow", self.pixel_freq_mhz / gearbox_ratio),
             ]
         elif xdr == 4:
             if True:
@@ -46,6 +50,7 @@ class HDMISignalGeneratorXDR(Elaboratable):
                     ECP5PLLConfig("shift_x2", self.pixel_freq_mhz * 10 / 2),
                     ECP5PLLConfig("shift", self.pixel_freq_mhz * 10 / 2 / 2),
                     ECP5PLLConfig("sync", self.pixel_freq_mhz),
+                    ECP5PLLConfig("slow", self.pixel_freq_mhz / gearbox_ratio),
                 ]
             else:
                 # Generate sclk(shift) from eclk(shift_x2)
@@ -53,6 +58,7 @@ class HDMISignalGeneratorXDR(Elaboratable):
                 pll_config = [
                     ECP5PLLConfig("shift_x2", self.pixel_freq_mhz * 10 / 2),
                     ECP5PLLConfig("sync", self.pixel_freq_mhz),
+                    ECP5PLLConfig("slow", self.pixel_freq_mhz / gearbox_ratio),
                 ]
                 shift_clk = Signal()
                 m.domains += ClockDomain("shift")
@@ -71,6 +77,7 @@ class HDMISignalGeneratorXDR(Elaboratable):
                     ECP5PLLConfig("shift_x2", self.pixel_freq_mhz * 10 / 2),
                     ECP5PLLConfig("shift", self.pixel_freq_mhz * 10 / 2. / 3.5),
                     ECP5PLLConfig("sync", self.pixel_freq_mhz),
+                    ECP5PLLConfig("slow", self.pixel_freq_mhz / gearbox_ratio),
                 ]
 
         m.submodules.pll2 = ECP5PLL(
@@ -200,34 +207,79 @@ class HDMISignalGeneratorXDR(Elaboratable):
 
 
         # Test image generator
+        framex = Signal(16)
         frame = Signal(16)
         vsync_r = Signal()
         m.d.sync += vsync_r.eq(vga_output.vs)
-        with m.If(~vsync_r & vga_output.vs):
-            m.d.sync += frame.eq(frame + 1)
+        with m.If(vsync_r & ~vga_output.vs):
+            m.d.sync += framex.eq(framex + 1)
+        m.d.slow += frame.eq(framex)
 
         # Blink an LED for each frame
-        led = platform.request("led", 0)
-        m.d.comb += led.eq(frame[0])
+        # led = platform.request("led", 0)
+        # m.d.comb += led.eq(frame[0])
 
-        frame_tri = Mux(frame[8], ~frame[:8], frame[:8])
-        frame_tri2 = Mux(frame[9], ~frame[1:9], frame[1:9])
+        def Render(frame, v_ctr, h_ctr, r, g, b):
+            m = Module()
 
-        v_ctr = m.submodules.vga.v_ctr
-        h_ctr = m.submodules.vga.h_ctr
+            frame_tri = Mux(frame[8], ~frame[:8], frame[:8])
+            frame_tri2 = Mux(frame[9], ~frame[1:9], frame[1:9])
 
-        dir1 = Mux(v_ctr[6], 1, -1)
-        X = (h_ctr + dir1 * frame[1:])
-        Y = (v_ctr * 2) >> 1
+            dir1 = Mux(v_ctr[6], 1, -1)
+            X = (h_ctr + dir1 * frame[1:])
+            Y = (v_ctr * 2) >> 1
 
-        m.d.sync += r.eq(frame_tri[1:])
-        m.d.sync += g.eq(v_ctr * Mux(X & Y, 255, 0))
-        m.d.sync += b.eq(~(frame_tri2+(X ^ Y))*255)
+            m.d.slow += r.eq(frame_tri[1:])
+            m.d.slow += g.eq(v_ctr * Mux(X & Y, 255, 0))
+            m.d.slow += b.eq(~(frame_tri2+(X ^ Y))*255)
+
+            # m.d.slow += r.eq(v_ctr)
+            # m.d.slow += g.eq(h_ctr)
+            # m.d.slow += b.eq(v_ctr[1:])
+
+            return m
+
+        v_ctrx = m.submodules.vga.v_ctr
+        h_ctrx = m.submodules.vga.h_ctr
+        v_ctr = Signal(v_ctrx.shape())
+        h_ctr = Signal(h_ctrx.shape())
+        m.d.sync += v_ctr.eq(v_ctrx)
+        m.d.sync += h_ctr.eq(h_ctrx)
+
+        gearbox_ctr = Signal(range(gearbox_ratio + 1))
+        m.d.sync += gearbox_ctr.eq(gearbox_ctr + 1)
+        with m.If((gearbox_ctr == gearbox_ratio - 1)):
+            m.d.sync += gearbox_ctr.eq(0)
+
+        R = [Signal(8) for _ in range(gearbox_ratio)]
+        G = [Signal(8) for _ in range(gearbox_ratio)]
+        B = [Signal(8) for _ in range(gearbox_ratio)]
+
+        Rr = [Signal(8) for _ in range(gearbox_ratio)]
+        Gr = [Signal(8) for _ in range(gearbox_ratio)]
+        Br = [Signal(8) for _ in range(gearbox_ratio)]
+
+        for i in range(gearbox_ratio):
+            m.submodules["Render{}".format(i)] = Render(frame, v_ctr, h_ctr + i, R[i], G[i], B[i])
+            m.d.sync += Rr[i].eq(R[i])
+            m.d.sync += Gr[i].eq(G[i])
+            m.d.sync += Br[i].eq(B[i])
+
+        with m.Switch(gearbox_ctr):
+            for i in range(gearbox_ratio):
+                with m.Case(i):
+                    m.d.sync += r.eq(Rr[i])
+                    m.d.sync += g.eq(Gr[i])
+                    m.d.sync += b.eq(Br[i])
 
         # Cycle colors
-        # m.d.sync += r.eq(Mux(frame[5], 255, 0))
-        # m.d.sync += g.eq(Mux(frame[6], 255, 0))
-        # m.d.sync += b.eq(Mux(frame[7], 255, 0))
+        # m.d.slow += r.eq(Mux(frame[5], 255, 0))
+        # m.d.slow += g.eq(Mux(frame[6], 255, 0))
+        # m.d.slow += b.eq(Mux(frame[7], 255, 0))
+
+        # m.d.comb += r.eq(255)
+        # m.d.comb += g.eq(128)
+        # m.d.comb += b.eq(64)
 
         return m
 
@@ -316,7 +368,7 @@ hdmi_configs = {
         ), 100, 77),
 
     "1920x1080p60": HDMIParameters(VGAParameters(
-            h_front=109,
+            h_front=108,
             h_sync=44,
             h_back=148,
             h_active=1920,
