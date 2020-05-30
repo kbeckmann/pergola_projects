@@ -12,6 +12,10 @@ def add_common_parsers(parser):
         "--timing-allow-fail", default=0, action="count",
         help="Allow timing to fail during place and route")
 
+    parser.add_argument(
+        "--dot", default=0, action="count",
+        help="Generates a dot file using yosys 'show'")
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -33,12 +37,7 @@ def main():
         help="builds an applet bitstream")
     add_common_parsers(p_build)
 
-    p_dot = subparsers.add_parser(
-        "dot",
-        description="Builds an applet bitstream and shows a graph of the design",
-        help="builds an applet bitstream and shows a graph of the design")
-
-    for action_parser in [p_run, p_build, p_dot]:
+    for action_parser in [p_run, p_build]:
         p_action_applet = action_parser.add_subparsers(dest="applet", metavar="APPLET")
         for applet in Applet.all.values():
             subparser = p_action_applet.add_parser(
@@ -53,18 +52,16 @@ def main():
     if args.verbose:
         logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 
-    if args.action == "run":
-        applet_cls = Applet.all[args.applet]
-        platform = PergolaPlatform()
-        platform.build(applet_cls(args=args), do_program=True, nextpnr_opts='--timing-allow-fail' if args.timing_allow_fail else '')
-    if args.action == "build":
-        applet_cls = Applet.all[args.applet]
-        platform = PergolaPlatform()
-        platform.build(applet_cls(args=args), do_program=False)
-    if args.action == "dot":
-        applet_cls = Applet.all[args.applet]
-        platform = PergolaPlatform()
-        platform.build(applet_cls(args=args), do_program=False, yosys_opts="-p show")
+    build_args = {
+        "nextpnr_opts": "--timing-allow-fail" if args.timing_allow_fail else "",
+        "ecppack_opts": "--compress",
+        "yosys_opts":   "-p show" if args.dot else "",
+        "do_program":   args.action == "run",
+    }
+
+    applet_cls = Applet.all[args.applet]
+    platform = PergolaPlatform()
+    platform.build(applet_cls(args=args), **build_args)
 
 if __name__ == "__main__":
     main()

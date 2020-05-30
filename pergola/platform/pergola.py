@@ -105,8 +105,4 @@ class PergolaPlatform(LatticeECP5Platform):
             #   kill $CATPID || true;
 
     def build(self, *args, **kwargs):
-        if self.device == "LFE5U-12F":
-            ecppack_opts = "--idcode 0x21111043"
-        else:
-            ecppack_opts = ""
-        LatticeECP5Platform.build(self, *args, ecppack_opts=ecppack_opts, **kwargs)
+        LatticeECP5Platform.build(self, *args, **kwargs)
