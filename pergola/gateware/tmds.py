@@ -240,8 +240,6 @@ class TMDSDecoder(Elaboratable):
 class TMDSEncoderTest(FHDLTestCase):
 
     def test_tmds_formal(self):
-        from nmigen.compat.fhdl.specials import TSTriple
-
         data = Signal(8)
         c = Signal(2)
         blank = Signal()
@@ -250,6 +248,7 @@ class TMDSEncoderTest(FHDLTestCase):
         m = Module()
         m.submodules.tmds = TMDSEncoder(data, c, blank, encoded)
 
+        # This will just generate a waveform where the encoded value doesn't change
         clk = Signal(32)
         m.d.sync += clk.eq(clk + 1)
         with m.If(clk > 2):
@@ -261,31 +260,29 @@ class TMDSEncoderTest(FHDLTestCase):
 class TMDSTest(FHDLTestCase):
 
     def test_tmds_formal(self):
-        from nmigen.compat.fhdl.specials import TSTriple
-
         m = Module()
 
-        data = Signal(8, reset=0xff)
+        data_in = Signal(8, reset=0xff)
         c = Signal(2)
         blank = Const(0)
         encoded = Signal(10)
-        m.submodules.tmds_encoder = TMDSEncoder(data, c, blank, encoded)
+        m.submodules.tmds_encoder = TMDSEncoder(data_in, c, blank, encoded)
 
         data_out = Signal(8)
         c_out = Signal(2)
         active_out = Signal()
         m.submodules.tmds_decoder = TMDSDecoder(encoded, data_out, c_out, active_out)
 
-        count = Signal(32)
-        m.d.sync += count.eq(count + 1)
-        with m.If((count > 7)):
-            m.d.comb += Assert(data_out == Past(data, clocks=5))
+        # Prove that data encodes and decodes to the original data again.
+        count = Signal(8)
+        with m.If((count < 5)):
+            m.d.sync += count.eq(count + 1)
+        with m.Else():
+            m.d.comb += Assert(data_out == Past(data_in, clocks=5))
 
         self.assertFormal(m, depth=100)
 
     def test_tmds_simulation(self):
-        from nmigen.compat.fhdl.specials import TSTriple
-
         m = Module()
 
         data = Signal(8, reset=0x3)
