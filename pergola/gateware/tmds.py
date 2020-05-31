@@ -1,7 +1,8 @@
 from nmigen import *
 from nmigen.back.pysim import Simulator, Active
-from nmigen.test.utils import FHDLTestCase
 from nmigen.asserts import *
+
+from ..util.test import FHDLTestCase
 
 """
 
@@ -288,7 +289,8 @@ class TMDSTest(FHDLTestCase):
         with m.If(valid):
             m.d.comb += Assert(data_out == Past(data_in, clocks=5))
 
-        self.assertFormal(m, depth=100)
+        self.assertFormal(m, mode="bmc", depth=20)
+        self.assertFormal(m, mode="prove", depth=20)
 
     def test_tmds_simulation(self):
         m = Module()
