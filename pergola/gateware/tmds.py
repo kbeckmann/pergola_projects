@@ -275,7 +275,7 @@ class TMDSTest(FHDLTestCase):
 
         # Prove that data encodes and decodes to the original data again.
         count = Signal(8)
-        with m.If((count < 5)):
+        with m.If(count < 5):
             m.d.sync += count.eq(count + 1)
         with m.Else():
             m.d.comb += Assert(data_out == Past(data_in, clocks=5))
