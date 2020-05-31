@@ -273,11 +273,19 @@ class TMDSTest(FHDLTestCase):
         active_out = Signal()
         m.submodules.tmds_decoder = TMDSDecoder(encoded, data_out, c_out, active_out)
 
-        # Prove that data encodes and decodes to the original data again.
-        count = Signal(8)
-        with m.If(count < 5):
-            m.d.sync += count.eq(count + 1)
+        # Only allow a single reset in the first cycle
+        with m.If(Initial()):
+            m.d.comb += Assume(ResetSignal() == 1)
         with m.Else():
+            m.d.comb += Assume(ResetSignal() == 0)
+
+        # Create a valid signal that goes high after 5 clock cycles
+        valid = Signal()
+        with m.If(Fell(Initial(), clocks=5)):
+            m.d.sync += valid.eq(1)
+
+        # Prove that data encodes and decodes to the original data again.
+        with m.If(valid):
             m.d.comb += Assert(data_out == Past(data_in, clocks=5))
 
         self.assertFormal(m, depth=100)
