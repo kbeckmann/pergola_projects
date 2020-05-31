@@ -315,8 +315,9 @@ hdmi_configs = {
             v_active=1080,
         ), 100, 77),
 
+    # Should be 148.5 MHz but the PLL can't generate 742.5 MHz.
     "1920x1080p60": HDMIParameters(VGAParameters(
-            h_front=109,
+            h_front=88,
             h_sync=44,
             h_back=148,
             h_active=1920,
