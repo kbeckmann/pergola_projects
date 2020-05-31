@@ -9,6 +9,9 @@ nMigen port of the following VHDL code, retrieved from
 https://github.com/daveshah1/prjtrellis-dvi/blob/master/hdl/tmds_encoder.vhd
 Original source seems to be unavailable.
 
+Updated to match implementation from
+https://www.digikey.com/eewiki/pages/viewpage.action?pageId=36569119#TMDSEncoder%28VHDL%29-AdditionalInformation
+
 Copyright (C) 2020 Konrad Beckmann
 Copyright (C) 2012 Mike Field <hamster@snap.net.nz>
 
@@ -99,7 +102,8 @@ class TMDSEncoder(Elaboratable):
 
         data_word = Signal(9)
         data_word_inv = Signal(9)
-        
+        disparity = Signal(Shape(4, signed=True))
+
         with m.If((ones > 4) | ((ones == 4) & (data[0] == 0))):
             m.d.sync += data_word.eq(xnored)
             m.d.sync += data_word_inv.eq(~xnored)
@@ -107,10 +111,12 @@ class TMDSEncoder(Elaboratable):
             m.d.sync += data_word.eq(xored)
             m.d.sync += data_word_inv.eq(~xored)
 
-        data_word_disparity = Signal(4)
-        m.d.comb += data_word_disparity.eq(0b1100 + sum(data_word[:8]))
+        # diff_q_m holds the difference between the number of ones and zeros
+        diff_q_m = Signal(Shape(4, signed=True))
+        data_word_ones = Signal(4)
+        m.d.comb += data_word_ones.eq(sum(data_word[:8]))
+        m.d.comb += diff_q_m.eq(sum(data_word[:8]) - sum(~data_word[:8]))
 
-        dc_bias = Signal(4)
         with m.If(self.blank):
             with m.Switch(self.c):
                 with m.Case(0b00):
@@ -121,25 +127,115 @@ class TMDSEncoder(Elaboratable):
                     m.d.sync += self.encoded.eq(0b0101010100)
                 with m.Case(0b11):
                     m.d.sync += self.encoded.eq(0b1010101011)
-            m.d.sync += dc_bias.eq(0)
+            m.d.sync += disparity.eq(0)
+
         with m.Else():
-            with m.If((dc_bias == 0) | (data_word_disparity == 0)):
-                with m.If(data_word[8]):
-                    m.d.sync += self.encoded.eq(Cat(data_word[:8], 0b01))
-                    m.d.sync += dc_bias.eq(dc_bias + data_word_disparity)
+            with m.If((disparity == 0) | (data_word_ones == 4)):
+                with m.If(data_word[8] == 0):
+                    m.d.sync += self.encoded.eq(Cat(data_word_inv[:8], data_word[8], ~data_word[8]))
+                    m.d.sync += disparity.eq(disparity - diff_q_m)
                 with m.Else():
-                    m.d.sync += self.encoded.eq(Cat(data_word[:8], 0b10))
-                    m.d.sync += dc_bias.eq(dc_bias - data_word_disparity)
-            with m.Elif(((dc_bias[3] == 0) & (data_word_disparity[3] == 0)) |
-                        ((dc_bias[3] == 1) & (data_word_disparity[3] == 1))):
-                m.d.sync += self.encoded.eq(Cat(data_word_inv[:8], data_word[8], 0b1))
-                m.d.sync += dc_bias.eq(dc_bias + data_word[8] - data_word_disparity)
+                    m.d.sync += self.encoded.eq(Cat(data_word[:9], ~data_word[8]))
+                    m.d.sync += disparity.eq(disparity + diff_q_m)
             with m.Else():
-                m.d.sync += self.encoded.eq(Cat(data_word, 0b0))
-                m.d.sync += dc_bias.eq(dc_bias - data_word_inv[8] + data_word_disparity)
+                with m.If(((disparity > 0) & (data_word_ones > 4)) |
+                            ((disparity < 0) & (data_word_ones < 4))):
+                    m.d.sync += self.encoded.eq(Cat(data_word_inv[:8], data_word[8], 0b1))
+                    with m.If(data_word[8] == 0):
+                        m.d.sync += disparity.eq(disparity - diff_q_m)
+                    with m.Else():
+                        m.d.sync += disparity.eq(disparity - diff_q_m + 2)
+                with m.Else():
+                    m.d.sync += self.encoded.eq(Cat(data_word[:9], 0b0))
+                    with m.If(data_word[8] == 0):
+                        m.d.sync += disparity.eq(disparity + diff_q_m - 2)
+                    with m.Else():
+                        m.d.sync += disparity.eq(disparity + diff_q_m)
 
         return m
 
+
+class TMDSDecoder(Elaboratable):
+    def __init__(self, data_in, data_out, c, active_data):
+        assert(data_in.shape().width == 10)
+        assert(data_out.shape().width == 8)
+        assert(c.shape().width == 2)
+        assert(active_data.shape().width == 1)
+
+        self.data_in = data_in
+        self.data_out = data_out
+        self.c = c
+        self.active_data = active_data
+
+    def elaborate(self, platform):
+        m = Module()
+
+        data_in = self.data_in
+        data_out = self.data_out
+        c = self.c
+        active_data = self.active_data
+
+        data_delayed = Signal(10)
+        sometimes_inverted = Signal(9)
+        next_c = Signal(2)
+        next_active_data = Signal()
+
+        m.d.sync += c.eq(next_c)
+        m.d.sync += active_data.eq(next_active_data)
+
+        with m.If(next_active_data == 0):
+            m.d.sync += data_out.eq(0)
+        with m.Elif(sometimes_inverted[8] == 1):
+            m.d.sync += data_out.eq(Cat(
+                sometimes_inverted[0],
+                sometimes_inverted[1] ^ sometimes_inverted[0],
+                sometimes_inverted[2] ^ sometimes_inverted[1],
+                sometimes_inverted[3] ^ sometimes_inverted[2],
+                sometimes_inverted[4] ^ sometimes_inverted[3],
+                sometimes_inverted[5] ^ sometimes_inverted[4],
+                sometimes_inverted[6] ^ sometimes_inverted[5],
+                sometimes_inverted[7] ^ sometimes_inverted[6],
+            ))
+        with m.Else():
+            m.d.sync += data_out.eq(Cat(
+                sometimes_inverted[0],
+                ~(sometimes_inverted[1] ^ sometimes_inverted[0]),
+                ~(sometimes_inverted[2] ^ sometimes_inverted[1]),
+                ~(sometimes_inverted[3] ^ sometimes_inverted[2]),
+                ~(sometimes_inverted[4] ^ sometimes_inverted[3]),
+                ~(sometimes_inverted[5] ^ sometimes_inverted[4]),
+                ~(sometimes_inverted[6] ^ sometimes_inverted[5]),
+                ~(sometimes_inverted[7] ^ sometimes_inverted[6]),
+            ))
+
+        with m.If(data_delayed[9] == 1):
+            m.d.sync += sometimes_inverted.eq(Cat(~data_delayed[:8], data_delayed[8]))
+        with m.Else():
+            m.d.sync += sometimes_inverted.eq(data_delayed[:9])
+
+        with m.Switch(data_in):
+            with m.Case(0b0010101011):
+                m.d.sync += next_c.eq(0b01)
+                m.d.sync += next_active_data.eq(0)
+            with m.Case(0b1101010100):
+                m.d.sync += next_c.eq(0b00)
+                m.d.sync += next_active_data.eq(0)
+            with m.Case(0b0101010100):
+                m.d.sync += next_c.eq(0b10)
+                m.d.sync += next_active_data.eq(0)
+            with m.Case(0b1010101011):
+                m.d.sync += next_c.eq(0b00)
+                m.d.sync += next_active_data.eq(0)
+            with m.Default():
+                m.d.sync += next_c.eq(0b00)
+                m.d.sync += next_active_data.eq(1)
+
+        m.d.sync += data_delayed.eq(data_in)
+
+        return m
+
+
+###############
 
 class TMDSEncoderTest(FHDLTestCase):
 
@@ -160,3 +256,57 @@ class TMDSEncoderTest(FHDLTestCase):
             m.d.comb += Assert(encoded != Past(encoded))
 
         self.assertFormal(m, depth=100)
+
+
+class TMDSTest(FHDLTestCase):
+
+    def test_tmds_formal(self):
+        from nmigen.compat.fhdl.specials import TSTriple
+
+        m = Module()
+
+        data = Signal(8, reset=0xff)
+        c = Signal(2)
+        blank = Const(0)
+        encoded = Signal(10)
+        m.submodules.tmds_encoder = TMDSEncoder(data, c, blank, encoded)
+
+        data_out = Signal(8)
+        c_out = Signal(2)
+        active_out = Signal()
+        m.submodules.tmds_decoder = TMDSDecoder(encoded, data_out, c_out, active_out)
+
+        count = Signal(32)
+        m.d.sync += count.eq(count + 1)
+        with m.If((count > 7)):
+            m.d.comb += Assert(data_out == Past(data, clocks=5))
+
+        self.assertFormal(m, depth=100)
+
+    def test_tmds_simulation(self):
+        from nmigen.compat.fhdl.specials import TSTriple
+
+        m = Module()
+
+        data = Signal(8, reset=0x3)
+        c = Signal(2)
+        blank = Signal()
+        encoded = Signal(10)
+        m.submodules.tmds_encoder = TMDSEncoder(data, c, blank, encoded)
+
+        data_out = Signal(8)
+        c_out = Signal(2)
+        active_out = Signal()
+        m.submodules.tmds_decoder = TMDSDecoder(encoded, data_out, c_out, active_out)
+
+        sim = Simulator(m)
+        sim.add_clock(1/25e6, domain="sync")
+
+        def process():
+            for i in range(0x20 * 256):
+                yield data.eq(i // 10)
+                yield
+
+        sim.add_sync_process(process)
+        with sim.write_vcd("tmds.vcd"):
+            sim.run()
