@@ -49,7 +49,7 @@ License from the original source:
 
 """
 
-class VGA2DVI(Elaboratable):
+class VGA2DVID(Elaboratable):
     """
     in_r:     Red pixel value (8 bits)
     in_g:     Green pixel value (8 bits)

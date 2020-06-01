@@ -7,19 +7,20 @@ from nmigen.build.dsl import *
 
 from .. import Applet
 from ...gateware.vga import VGAOutput, VGAOutputSubtarget, VGAParameters
-from ...gateware.vga2dvi import VGA2DVI
+from ...gateware.vga2dvid import VGA2DVID
 from ...util.ecp5pll import ECP5PLL, ECP5PLLConfig
 
 
-class HDMISignalGeneratorXDR(Elaboratable):
-    def __init__(self, hdmi_out_clk, hdmi_out, vga_parameters, pll1_freq_mhz, pixel_freq_mhz, xdr=1, skip_pll_checks=False):
-        self.hdmi_out_clk = hdmi_out_clk
-        self.hdmi_out = hdmi_out
+class DVIDSignalGeneratorXDR(Elaboratable):
+    def __init__(self, dvid_out_clk, dvid_out, vga_parameters, pll1_freq_mhz, pixel_freq_mhz, xdr=1, skip_pll_checks=False, invert_outputs=[0, 0, 0, 0]):
+        self.dvid_out_clk = dvid_out_clk
+        self.dvid_out = dvid_out
         self.vga_parameters = vga_parameters
         self.pll1_freq_mhz = pll1_freq_mhz
         self.pixel_freq_mhz = pixel_freq_mhz
         self.xdr = xdr
         self.skip_pll_checks = skip_pll_checks
+        self.invert_outputs = invert_outputs
 
     def elaborate(self, platform):
         m = Module()
@@ -116,7 +117,7 @@ class HDMISignalGeneratorXDR(Elaboratable):
             vga_parameters=self.vga_parameters,
         )
 
-        m.submodules.vga2dvi = VGA2DVI(
+        m.submodules.vga2dvid = VGA2DVID(
             in_r = r_r,
             in_g = g_r,
             in_b = b_r,
@@ -132,70 +133,69 @@ class HDMISignalGeneratorXDR(Elaboratable):
 
         # Store output bits in separate registers
         #
-        # Also node that pixel_clk, pixel_r, pixel_g are inverted.
-        # This is because on PMOD1 on the Pergola board, they are routed
-        # this way.
+        # Also invert signals based on parameters
         pixel_clk_r = Signal(xdr)
         pixel_r_r = Signal(xdr)
         pixel_g_r = Signal(xdr)
         pixel_b_r = Signal(xdr)
-        m.d.shift += pixel_clk_r.eq(~pixel_clk)
-        m.d.shift += pixel_r_r.eq(~pixel_r)
-        m.d.shift += pixel_g_r.eq(~pixel_g)
-        m.d.shift += pixel_b_r.eq(pixel_b)
+        invert_outputs = self.invert_outputs
+        m.d.shift += pixel_clk_r.eq(~pixel_clk if invert_outputs[0] else pixel_clk)
+        m.d.shift += pixel_r_r  .eq(~pixel_r   if invert_outputs[3] else pixel_r)
+        m.d.shift += pixel_g_r  .eq(~pixel_g   if invert_outputs[2] else pixel_g)
+        m.d.shift += pixel_b_r  .eq(~pixel_b   if invert_outputs[1] else pixel_b)
 
         if xdr == 1:
             m.d.comb += [
-                self.hdmi_out_clk.eq(pixel_clk_r[0]),
-                self.hdmi_out.eq(Cat(pixel_b_r[0], pixel_g_r[0], pixel_r_r[0])),
+                self.dvid_out_clk.eq(pixel_clk_r[0]),
+                self.dvid_out.eq(Cat(pixel_b_r[0], pixel_g_r[0], pixel_r_r[0])),
             ]
         elif xdr == 2:
             m.d.comb += [
-                self.hdmi_out_clk.o_clk.eq(ClockSignal("shift")),
-                self.hdmi_out_clk.o0.eq(pixel_clk_r[0]),
-                self.hdmi_out_clk.o1.eq(pixel_clk_r[1]),
+                self.dvid_out_clk.o_clk.eq(ClockSignal("shift")),
+                self.dvid_out_clk.o0.eq(pixel_clk_r[0]),
+                self.dvid_out_clk.o1.eq(pixel_clk_r[1]),
 
-                self.hdmi_out.o_clk.eq(ClockSignal("shift")),
-                self.hdmi_out.o0.eq(Cat(pixel_b_r[0], pixel_g_r[0], pixel_r_r[0])),
-                self.hdmi_out.o1.eq(Cat(pixel_b_r[1], pixel_g_r[1], pixel_r_r[1])),
+                self.dvid_out.o_clk.eq(ClockSignal("shift")),
+                self.dvid_out.o0.eq(Cat(pixel_b_r[0], pixel_g_r[0], pixel_r_r[0])),
+                self.dvid_out.o1.eq(Cat(pixel_b_r[1], pixel_g_r[1], pixel_r_r[1])),
             ]
         elif xdr == 4:
             m.d.comb += [
-                self.hdmi_out_clk.o_clk.eq(ClockSignal("shift")),
-                self.hdmi_out_clk.o_eclk.eq(ClockSignal("shift_x2")),
-                self.hdmi_out_clk.o0.eq(pixel_clk_r[0]),
-                self.hdmi_out_clk.o1.eq(pixel_clk_r[1]),
-                self.hdmi_out_clk.o2.eq(pixel_clk_r[2]),
-                self.hdmi_out_clk.o3.eq(pixel_clk_r[3]),
+                self.dvid_out_clk.o_clk.eq(ClockSignal("shift")),
+                self.dvid_out_clk.o_eclk.eq(ClockSignal("shift_x2")),
+                self.dvid_out_clk.o0.eq(pixel_clk_r[0]),
+                self.dvid_out_clk.o1.eq(pixel_clk_r[1]),
+                self.dvid_out_clk.o2.eq(pixel_clk_r[2]),
+                self.dvid_out_clk.o3.eq(pixel_clk_r[3]),
 
-                self.hdmi_out.o_clk.eq(ClockSignal("shift")),
-                self.hdmi_out.o_eclk.eq(ClockSignal("shift_x2")),
-                self.hdmi_out.o0.eq(Cat(pixel_b_r[0], pixel_g_r[0], pixel_r_r[0])),
-                self.hdmi_out.o1.eq(Cat(pixel_b_r[1], pixel_g_r[1], pixel_r_r[1])),
-                self.hdmi_out.o2.eq(Cat(pixel_b_r[2], pixel_g_r[2], pixel_r_r[2])),
-                self.hdmi_out.o3.eq(Cat(pixel_b_r[3], pixel_g_r[3], pixel_r_r[3])),
+                self.dvid_out.o_clk.eq(ClockSignal("shift")),
+                self.dvid_out.o_eclk.eq(ClockSignal("shift_x2")),
+                self.dvid_out.o0.eq(Cat(pixel_b_r[0], pixel_g_r[0], pixel_r_r[0])),
+                self.dvid_out.o1.eq(Cat(pixel_b_r[1], pixel_g_r[1], pixel_r_r[1])),
+                self.dvid_out.o2.eq(Cat(pixel_b_r[2], pixel_g_r[2], pixel_r_r[2])),
+                self.dvid_out.o3.eq(Cat(pixel_b_r[3], pixel_g_r[3], pixel_r_r[3])),
             ]
         elif xdr == 7:
             m.d.comb += [
-                self.hdmi_out_clk.o_clk.eq(ClockSignal("shift")),
-                self.hdmi_out_clk.o_eclk.eq(ClockSignal("shift_x2")),
-                self.hdmi_out_clk.o0.eq(pixel_clk_r[0]),
-                self.hdmi_out_clk.o1.eq(pixel_clk_r[1]),
-                self.hdmi_out_clk.o2.eq(pixel_clk_r[2]),
-                self.hdmi_out_clk.o3.eq(pixel_clk_r[3]),
-                self.hdmi_out_clk.o4.eq(pixel_clk_r[4]),
-                self.hdmi_out_clk.o5.eq(pixel_clk_r[5]),
-                self.hdmi_out_clk.o6.eq(pixel_clk_r[6]),
+                self.dvid_out_clk.o_clk.eq(ClockSignal("shift")),
+                self.dvid_out_clk.o_eclk.eq(ClockSignal("shift_x2")),
+                self.dvid_out_clk.o0.eq(pixel_clk_r[0]),
+                self.dvid_out_clk.o1.eq(pixel_clk_r[1]),
+                self.dvid_out_clk.o2.eq(pixel_clk_r[2]),
+                self.dvid_out_clk.o3.eq(pixel_clk_r[3]),
+                self.dvid_out_clk.o4.eq(pixel_clk_r[4]),
+                self.dvid_out_clk.o5.eq(pixel_clk_r[5]),
+                self.dvid_out_clk.o6.eq(pixel_clk_r[6]),
 
-                self.hdmi_out.o_clk.eq(ClockSignal("shift")),
-                self.hdmi_out.o_eclk.eq(ClockSignal("shift_x2")),
-                self.hdmi_out.o0.eq(Cat(pixel_b_r[0], pixel_g_r[0], pixel_r_r[0])),
-                self.hdmi_out.o1.eq(Cat(pixel_b_r[1], pixel_g_r[1], pixel_r_r[1])),
-                self.hdmi_out.o2.eq(Cat(pixel_b_r[2], pixel_g_r[2], pixel_r_r[2])),
-                self.hdmi_out.o3.eq(Cat(pixel_b_r[3], pixel_g_r[3], pixel_r_r[3])),
-                self.hdmi_out.o4.eq(Cat(pixel_b_r[4], pixel_g_r[4], pixel_r_r[4])),
-                self.hdmi_out.o5.eq(Cat(pixel_b_r[5], pixel_g_r[5], pixel_r_r[5])),
-                self.hdmi_out.o6.eq(Cat(pixel_b_r[6], pixel_g_r[6], pixel_r_r[6])),
+                self.dvid_out.o_clk.eq(ClockSignal("shift")),
+                self.dvid_out.o_eclk.eq(ClockSignal("shift_x2")),
+                self.dvid_out.o0.eq(Cat(pixel_b_r[0], pixel_g_r[0], pixel_r_r[0])),
+                self.dvid_out.o1.eq(Cat(pixel_b_r[1], pixel_g_r[1], pixel_r_r[1])),
+                self.dvid_out.o2.eq(Cat(pixel_b_r[2], pixel_g_r[2], pixel_r_r[2])),
+                self.dvid_out.o3.eq(Cat(pixel_b_r[3], pixel_g_r[3], pixel_r_r[3])),
+                self.dvid_out.o4.eq(Cat(pixel_b_r[4], pixel_g_r[4], pixel_r_r[4])),
+                self.dvid_out.o5.eq(Cat(pixel_b_r[5], pixel_g_r[5], pixel_r_r[5])),
+                self.dvid_out.o6.eq(Cat(pixel_b_r[6], pixel_g_r[6], pixel_r_r[6])),
             ]
 
 
@@ -232,21 +232,20 @@ class HDMISignalGeneratorXDR(Elaboratable):
         return m
 
 
-
-class HDMIParameters():
+class DVIDParameters():
     def __init__(self, vga_parameters, pll1_freq_mhz, pixel_freq_mhz):
         self.vga_parameters = vga_parameters
         self.pll1_freq_mhz = pll1_freq_mhz
         self.pixel_freq_mhz = pixel_freq_mhz
 
     def __repr__(self):
-        return "(HDMIParameters ({}) {})".format(
+        return "(DVIDParameters ({}) {})".format(
             self.vga_parameters,
             self.pll1_freq_mhz,
             self.pixel_freq_mhz)
 
-hdmi_configs = {
-    "640x480p60": HDMIParameters(VGAParameters(
+dvid_configs = {
+    "640x480p60": DVIDParameters(VGAParameters(
             h_front=16,
             h_sync=96,
             h_back=44,
@@ -258,7 +257,7 @@ hdmi_configs = {
         ), 100, 25),
 
     # This uses a clock that is compatible with xdr=7
-    "640x480p60_7": HDMIParameters(VGAParameters(
+    "640x480p60_7": DVIDParameters(VGAParameters(
             h_front=16,
             h_sync=96,
             h_back=44,
@@ -269,7 +268,7 @@ hdmi_configs = {
             v_active=480,
         ), 100, 28),
 
-    "1280x720p60": HDMIParameters(VGAParameters(
+    "1280x720p60": DVIDParameters(VGAParameters(
             h_front=82,
             h_sync=80,
             h_back=202,
@@ -281,7 +280,7 @@ hdmi_configs = {
         ), 100, 74),
 
     # This uses a clock that is compatible with xdr=7
-    "1280x720p60_7": HDMIParameters(VGAParameters(
+    "1280x720p60_7": DVIDParameters(VGAParameters(
             h_front=82,
             h_sync=80,
             h_back=202,
@@ -292,7 +291,7 @@ hdmi_configs = {
             v_active=720,
         ), 100, 70),
 
-    "1920x1080p30": HDMIParameters(VGAParameters(
+    "1920x1080p30": DVIDParameters(VGAParameters(
             h_front=80,
             h_sync=44,
             h_back=148,
@@ -304,7 +303,7 @@ hdmi_configs = {
         ), 100, 74),
 
     # This uses a clock that is compatible with xdr=7
-    "1920x1080p30_7": HDMIParameters(VGAParameters(
+    "1920x1080p30_7": DVIDParameters(VGAParameters(
             h_front=100,
             h_sync=44,
             h_back=215,
@@ -316,7 +315,7 @@ hdmi_configs = {
         ), 100, 77),
 
     # Should be 148.5 MHz but the PLL can't generate 742.5 MHz.
-    "1920x1080p60": HDMIParameters(VGAParameters(
+    "1920x1080p60": DVIDParameters(VGAParameters(
             h_front=88,
             h_sync=44,
             h_back=148,
@@ -327,7 +326,7 @@ hdmi_configs = {
             v_active=1080,
         ), 100, 150),
 
-    "2560x1440p30": HDMIParameters(VGAParameters(
+    "2560x1440p30": DVIDParameters(VGAParameters(
             h_front=48,
             h_sync=32,
             h_back=80,
@@ -341,7 +340,7 @@ hdmi_configs = {
     # Generates a 60Hz signal but needs 1.2V on VCC.
     # Needs a simpler test image to meet timing on the sync/pixel cd.
     # Can run at 205MHz@1.1V
-    "2560x1440p60": HDMIParameters(VGAParameters(
+    "2560x1440p60": DVIDParameters(VGAParameters(
             h_front=20,
             h_sync=20,
             h_back=20,
@@ -353,10 +352,10 @@ hdmi_configs = {
         ), 100, 228),
 }
 
-class HDMIApplet(Applet, applet_name="hdmi"):
-    help = "HDMI/DVID signal generator"
+class DVIDApplet(Applet, applet_name="dvid"):
+    help = "DVID/DVID signal generator"
     description = """
-    HDMI/DVID signal generator
+    DVID/DVID signal generator
 
     Can use SDR, DDR, DDRx2, DDRx7:1 to serialize the output.
 
@@ -375,7 +374,7 @@ class HDMIApplet(Applet, applet_name="hdmi"):
             help="sdr=1, ddr=2, ddrx2=4, ddrx7=7")
 
         parser.add_argument(
-            "--config", choices=hdmi_configs.keys(), required=True,
+            "--config", choices=dvid_configs.keys(), required=True,
             help="Set resolution and pixel clock")
 
         parser.add_argument(
@@ -384,34 +383,41 @@ class HDMIApplet(Applet, applet_name="hdmi"):
 
     def __init__(self, args):
         self.xdr = args.xdr
-        self.hdmi_config = args.config
+        self.dvid_config = args.config
         self.skip_pll_checks = args.skip_pll_checks
 
     def elaborate(self, platform):
 
+        # PMOD2 pinout:
+        # CLK B1/B2
+        # D0  C1/C2 (b)
+        # D1  E2/D1 (g)  inverted
+        # D2  G2/F1 (r)  inverted
+
         platform.add_resources([
-            Resource("pmod1_lvds", 0, Pins("L1 J1 G1", dir="o"),
+            Resource("pmod2_lvds", 0, Pins("C1  D1  F1", dir="o"),
                     Attrs(IO_TYPE="LVDS", DIFFRESISTOR="100")),
-            Resource("pmod1_lvds_clk", 0, Pins("N1", dir="o"),
+            Resource("pmod2_lvds_clk", 0, Pins("B1", dir="o"),
                     Attrs(IO_TYPE="LVDS", DIFFRESISTOR="100")),
         ])
 
         xdr = self.xdr
-        hdmi_config = hdmi_configs[self.hdmi_config]
+        dvid_config = dvid_configs[self.dvid_config]
 
-        hdmi_out_clk = platform.request("pmod1_lvds_clk", 0, xdr=xdr if xdr > 1 else 0)
-        hdmi_out = platform.request("pmod1_lvds", 0, xdr=xdr if xdr > 1 else 0)
+        dvid_out_clk = platform.request("pmod2_lvds_clk", 0, xdr=xdr if xdr > 1 else 0)
+        dvid_out = platform.request("pmod2_lvds", 0, xdr=xdr if xdr > 1 else 0)
 
         m = Module()
 
-        m.submodules.hdmi_signal_generator = HDMISignalGeneratorXDR(
-            hdmi_out_clk=hdmi_out_clk,
-            hdmi_out=hdmi_out,
-            vga_parameters=hdmi_config.vga_parameters,
-            pll1_freq_mhz=hdmi_config.pll1_freq_mhz,
-            pixel_freq_mhz=hdmi_config.pixel_freq_mhz,
+        m.submodules.dvid_signal_generator = DVIDSignalGeneratorXDR(
+            dvid_out_clk=dvid_out_clk,
+            dvid_out=dvid_out,
+            vga_parameters=dvid_config.vga_parameters,
+            pll1_freq_mhz=dvid_config.pll1_freq_mhz,
+            pixel_freq_mhz=dvid_config.pixel_freq_mhz,
             xdr=xdr,
-            skip_pll_checks=self.skip_pll_checks)
+            skip_pll_checks=self.skip_pll_checks,
+            invert_outputs=[0, 0, 1, 1])
 
         return m
 
@@ -419,11 +425,11 @@ class HDMIApplet(Applet, applet_name="hdmi"):
 #####################
 
 
-class HDMITest(FHDLTestCase):
+class DVIDTest(FHDLTestCase):
     '''
     TODO: Write actual test cases. These are just to generate waveforms to analyze.
     '''
-    def test_hdmi(self):
+    def test_dvid(self):
         output = Record([
             ('hs', 1),
             ('vs', 1),
@@ -463,7 +469,7 @@ class HDMITest(FHDLTestCase):
             v_active=480,
         )
 
-        m.submodules.vga2dvi = VGA2DVI(
+        m.submodules.vga2dvid = VGA2DVID(
             in_r = r,
             in_g = g,
             in_b = b,
@@ -484,11 +490,11 @@ class HDMITest(FHDLTestCase):
                 yield
 
         sim.add_sync_process(process)
-        with sim.write_vcd("hdmi.vcd"):
+        with sim.write_vcd("dvid.vcd"):
             sim.run()
 
 
-    def test_vga2dvi(self):
+    def test_vga2dvid(self):
 
         sync = ClockDomain()
         pixel = ClockDomain()
@@ -509,7 +515,7 @@ class HDMITest(FHDLTestCase):
         pixel_b = Signal()
         pixel_clk = Signal()
 
-        m.submodules.vga2dvi = VGA2DVI(
+        m.submodules.vga2dvid = VGA2DVID(
             in_r = r,
             in_g = g,
             in_b = b,
@@ -530,33 +536,5 @@ class HDMITest(FHDLTestCase):
                 yield
 
         sim.add_sync_process(process)
-        with sim.write_vcd("hdmi_vga2dvi.vcd"):
-            sim.run()
-
-
-    def test_tmds(self):
-
-        sync = ClockDomain()
-        pixel = ClockDomain()
-
-        m = Module()
-        m.domains += sync, pixel
-
-        data = Signal(8, reset=3)
-
-        c = Signal(2)
-        blank = Signal()
-        encoded = Signal(10)
-
-        m.submodules.tmds = TMDSEncoder(data, c, blank, encoded)
-
-        sim = Simulator(m)
-        sim.add_clock(1/25e6, domain="sync")
-        sim.add_clock(1/250e6, domain="pixel")
-        def process():
-            for _ in range(1000):
-                yield
-
-        sim.add_sync_process(process)
-        with sim.write_vcd("hdmi_tmds.vcd"):
+        with sim.write_vcd("dvid_vga2dvid.vcd"):
             sim.run()

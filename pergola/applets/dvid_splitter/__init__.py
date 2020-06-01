@@ -3,10 +3,10 @@ from nmigen.build import *
 from .. import Applet
 from ...util.ecp5pll import ECP5PLL, ECP5PLLConfig
 
-class HDMISplitterApplet(Applet, applet_name="hdmi-splitter"):
-    help = "Forwards a HDMI input to two outputs"
+class DVIDSplitterApplet(Applet, applet_name="dvid-splitter"):
+    help = "Forwards a DVID input to two outputs"
     description = """
-    Forwards a HDMI input to two outputs
+    Forwards a DVID input to two outputs
 
     PMOD1 is output 1
     PMOD2 is input
@@ -35,13 +35,13 @@ class HDMISplitterApplet(Applet, applet_name="hdmi-splitter"):
                      Attrs(IO_TYPE="LVDS")),
         ])
 
-        hdmi_in = platform.request("pmod2_lvds", 0)
+        dvid_in = platform.request("pmod2_lvds", 0)
 
-        hdmi_out = platform.request("pmod1_lvds", 0)
-        hdmi_out_clk = platform.request("pmod1_lvds_clk", 0)
+        dvid_out = platform.request("pmod1_lvds", 0)
+        dvid_out_clk = platform.request("pmod1_lvds_clk", 0)
 
-        hdmi_out2 = platform.request("pmod3_lvds", 0)
-        hdmi_out2_clk = platform.request("pmod3_lvds_clk", 0)
+        dvid_out2 = platform.request("pmod3_lvds", 0)
+        dvid_out2_clk = platform.request("pmod3_lvds_clk", 0)
 
         m = Module()
 
@@ -49,10 +49,10 @@ class HDMISplitterApplet(Applet, applet_name="hdmi-splitter"):
             ECP5PLLConfig("pixel", 75),
         ], clock_signal_name="pmod2_lvds_clk")
 
-        m.d.comb += hdmi_out.eq(~hdmi_in)
-        m.d.comb += hdmi_out_clk.eq(ClockSignal("pixel"))
+        m.d.comb += dvid_out.eq(~dvid_in)
+        m.d.comb += dvid_out_clk.eq(ClockSignal("pixel"))
 
-        m.d.comb += hdmi_out2.eq(Cat(~hdmi_in[0], hdmi_in[1:]))
-        m.d.comb += hdmi_out2_clk.eq(ClockSignal("pixel"))
+        m.d.comb += dvid_out2.eq(Cat(~dvid_in[0], dvid_in[1:]))
+        m.d.comb += dvid_out2_clk.eq(ClockSignal("pixel"))
 
         return m
