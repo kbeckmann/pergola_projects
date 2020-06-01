@@ -4,6 +4,7 @@ from nmigen.back.pysim import Simulator, Active
 from nmigen.test.utils import FHDLTestCase
 from nmigen.asserts import *
 from nmigen.build.dsl import *
+from nmigen.lib.fifo import AsyncFIFOBuffered
 
 from .. import Applet
 from ...gateware.vga import VGAOutput, VGAOutputSubtarget, VGAParameters
@@ -26,6 +27,8 @@ class DVIDSignalGeneratorXDR(Elaboratable):
         m = Module()
 
         xdr = self.xdr
+
+        gearbox_factor = 8
 
         m.submodules.pll1 = ECP5PLL([
             ECP5PLLConfig("clk_pll1", self.pll1_freq_mhz),
@@ -80,6 +83,21 @@ class DVIDSignalGeneratorXDR(Elaboratable):
             clock_signal_freq=self.pll1_freq_mhz * 1e6,
             skip_checks=self.skip_pll_checks)
 
+        # Generate the slow clock using logic
+        gearbox_ctr = Signal(range(gearbox_factor))
+        m.d.sync += gearbox_ctr.eq(gearbox_ctr + 1)
+
+        m.domains += ClockDomain("slow")
+        m.d.comb += ClockSignal("slow").eq(gearbox_ctr[-1])
+        ClockSignal("slow").clock = Clock(self.pixel_freq_mhz / gearbox_factor)
+
+        m.submodules.fifo = fifo = AsyncFIFOBuffered(
+            width=8 * 3 * gearbox_factor, # (r, g, b) * gearbox_factor
+            depth=5,
+            exact_depth=True,
+            r_domain="sync",
+            w_domain="slow")
+
         vga_output = Record([
             ('hs', 1),
             ('vs', 1),
@@ -98,9 +116,19 @@ class DVIDSignalGeneratorXDR(Elaboratable):
         hs_r = Signal()
         vs_r = Signal()
 
-        m.submodules += FFSynchronizer(r, r_r, o_domain="sync", stages=3)
-        m.submodules += FFSynchronizer(g, g_r, o_domain="sync", stages=3)
-        m.submodules += FFSynchronizer(b, b_r, o_domain="sync", stages=3)
+        # Always keep reading
+        pixels = Signal(8 * 3 * gearbox_factor)
+
+        # Consume one pixel every pixel clock
+        m.d.sync += pixels.eq(pixels[8 * 3:])
+
+        with m.If(gearbox_ctr == gearbox_factor - 1):
+            m.d.sync += pixels.eq(fifo.r_data)
+        m.d.comb += fifo.r_en.eq(fifo.r_rdy)
+
+        m.d.sync += r.eq(pixels[ 0: 0+8])
+        m.d.sync += g.eq(pixels[ 8: 8+8])
+        m.d.sync += b.eq(pixels[16:16+8])
 
         m.submodules += FFSynchronizer(vga_output.blank, blank_r, o_domain="sync", stages=5)
         m.submodules += FFSynchronizer(vga_output.hs, hs_r, o_domain="sync", stages=5)
@@ -118,9 +146,9 @@ class DVIDSignalGeneratorXDR(Elaboratable):
         )
 
         m.submodules.vga2dvid = VGA2DVID(
-            in_r = r_r,
-            in_g = g_r,
-            in_b = b_r,
+            in_r = r,
+            in_g = g,
+            in_b = b,
             in_blank = blank_r,
             in_hsync = hs_r,
             in_vsync = vs_r,
@@ -132,7 +160,6 @@ class DVIDSignalGeneratorXDR(Elaboratable):
         )
 
         # Store output bits in separate registers
-        #
         # Also invert signals based on parameters
         pixel_clk_r = Signal(xdr)
         pixel_r_r = Signal(xdr)
@@ -198,36 +225,58 @@ class DVIDSignalGeneratorXDR(Elaboratable):
                 self.dvid_out.o6.eq(Cat(pixel_b_r[6], pixel_g_r[6], pixel_r_r[6])),
             ]
 
-
         # Test image generator
+        framex = Signal(16)
         frame = Signal(16)
         vsync_r = Signal()
         m.d.sync += vsync_r.eq(vga_output.vs)
-        with m.If(~vsync_r & vga_output.vs):
-            m.d.sync += frame.eq(frame + 1)
+        with m.If(vsync_r & ~vga_output.vs):
+            m.d.sync += framex.eq(framex + 1)
+        m.d.slow += frame.eq(framex)
 
-        # Blink an LED for each frame
-        led = platform.request("led", 0)
-        m.d.comb += led.eq(frame[0])
 
-        frame_tri = Mux(frame[8], ~frame[:8], frame[:8])
-        frame_tri2 = Mux(frame[9], ~frame[1:9], frame[1:9])
+        def Render(frame, v_ctr, h_ctr, r, g, b):
+            m = Module()
 
-        v_ctr = m.submodules.vga.v_ctr
-        h_ctr = m.submodules.vga.h_ctr
+            if True:
+                frame_tri = Mux(frame[8], ~frame[:8], frame[:8])
+                frame_tri2 = Mux(frame[9], ~frame[1:9], frame[1:9])
 
-        dir1 = Mux(v_ctr[6], 1, -1)
-        X = (h_ctr + dir1 * frame[1:])
-        Y = (v_ctr * 2) >> 1
+                dir1 = Mux(v_ctr[6], 1, -1)
+                X = (h_ctr + dir1 * frame[1:])
+                Y = (v_ctr * 2) >> 1
 
-        m.d.sync += r.eq(frame_tri[1:])
-        m.d.sync += g.eq(v_ctr * Mux(X & Y, 255, 0))
-        m.d.sync += b.eq(~(frame_tri2+(X ^ Y))*255)
+                m.d.slow += r.eq(frame_tri[1:])
+                m.d.slow += g.eq(v_ctr * Mux(X & Y, 255, 0))
+                m.d.slow += b.eq(~(frame_tri2+(X ^ Y))*255)
+            else:
+                m.d.slow += r.eq(0)
+                m.d.slow += g.eq(h_ctr)
+                m.d.slow += b.eq(250)
 
-        # Cycle colors
-        # m.d.sync += r.eq(Mux(frame[5], 255, 0))
-        # m.d.sync += g.eq(Mux(frame[6], 255, 0))
-        # m.d.sync += b.eq(Mux(frame[7], 255, 0))
+            return m
+
+        # TODO: Make this nicer. Generate the VGA sync signals in the slow domain even.
+        v_ctrx = m.submodules.vga.v_ctr
+        h_ctrx = m.submodules.vga.h_ctr
+        v_ctr = Signal(v_ctrx.shape())
+        h_ctr = Signal(h_ctrx.shape())
+        m.d.slow += v_ctr.eq(v_ctrx)
+        m.d.slow += h_ctr.eq(h_ctrx)
+
+        R = [Signal(8) for _ in range(gearbox_factor)]
+        G = [Signal(8) for _ in range(gearbox_factor)]
+        B = [Signal(8) for _ in range(gearbox_factor)]
+
+        # Always write
+        m.d.comb += fifo.w_en.eq(fifo.w_rdy)
+
+        # Render one pixel for each step in the factor
+        for i in range(gearbox_factor):
+            m.submodules["Render{}".format(i)] = Render(frame, v_ctr, h_ctr + i, R[i], G[i], B[i])
+
+        # Store a wide concatenated value with all pixels over the whole gearing
+        m.d.comb += fifo.w_data.eq(Cat([(R[i], G[i], B[i]) for i in range(gearbox_factor)]))
 
         return m
 
@@ -316,7 +365,7 @@ dvid_configs = {
 
     # Should be 148.5 MHz but the PLL can't generate 742.5 MHz.
     "1920x1080p60": DVIDParameters(VGAParameters(
-            h_front=88,
+            h_front=100,
             h_sync=44,
             h_back=148,
             h_active=1920,
@@ -324,7 +373,7 @@ dvid_configs = {
             v_sync=5,
             v_back=36,
             v_active=1080,
-        ), 100, 150),
+        ), 100, 148),
 
     "2560x1440p30": DVIDParameters(VGAParameters(
             h_front=48,
