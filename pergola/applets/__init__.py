@@ -34,8 +34,8 @@ class Applet(Elaboratable):
 
 from . import blinky
 from . import delayf
-from . import xdr
 from . import hdmi
 from . import hdmi_splitter
 from . import pll
 from . import radio_tx
+from . import xdr
