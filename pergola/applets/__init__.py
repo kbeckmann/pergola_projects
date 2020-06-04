@@ -36,6 +36,7 @@ from . import blinky
 from . import delayf
 from . import dvid
 from . import dvid_splitter
+from . import gearbox
 from . import pll
 from . import radio_tx
 from . import xdr
