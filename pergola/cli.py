@@ -16,6 +16,22 @@ def add_common_parsers(parser):
         "--dot", default=0, action="count",
         help="Generates a dot file using yosys 'show'")
 
+    parser.add_argument(
+        "--flow3", default=0, action="count",
+        help="Enable flow3")
+
+    parser.add_argument(
+        "--abc9", default=0, action="count",
+        help="Enable abc9")
+
+    parser.add_argument(
+        "--nowidelut", default=0, action="count",
+        help="Enable nowidelut")
+
+    parser.add_argument(
+        "--dff", default=0, action="count",
+        help="Enable dff")
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -52,10 +68,18 @@ def main():
     if args.verbose:
         logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 
+    synth_opts = " ".join([
+        "-abc9" if args.abc9 else "",
+        "-nowidelut" if args.nowidelut else "",
+        "-dff" if args.dff else ""
+    ])
+
     build_args = {
         "nextpnr_opts": "--timing-allow-fail" if args.timing_allow_fail else "",
         "ecppack_opts": "--compress",
         "yosys_opts":   "-p show" if args.dot else "",
+        "script_after_read": "scratchpad -copy abc9.script.flow3 abc9.script" if args.flow3 else "",
+        "synth_opts": synth_opts,
         "do_program":   args.action == "run",
     }
 
