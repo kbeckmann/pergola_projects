@@ -3,6 +3,7 @@ from nmigen.build import *
 
 from .. import Applet
 from ...gateware.gearbox import Gearbox
+from ...util.clock import ClockDivider
 
 
 class GearboxExampleApplet(Applet, applet_name="gearbox"):
@@ -39,38 +40,28 @@ class GearboxExampleApplet(Applet, applet_name="gearbox"):
 
         m = Module()
 
-        ### TODO: Fix this messy slow clock generator..
-        timer = Signal(21)
-        m.d.sync += timer.eq(timer + 1)
-        m.domains += ClockDomain("slow")
-        m.d.comb += ClockSignal("slow").eq(timer[-1])
+        m.submodules += ClockDivider(
+            divisor=16e6 / 2, # 2Hz
+            cd_out="slow",
+        )
 
-        m.domains += ClockDomain("in")
-        cnt_in = Signal(range(width_out))
-        clk_in = Signal()
-        with m.If(cnt_in == (width_out - 1)):
-            m.d.slow += cnt_in.eq(0)
-        with m.Else():
-            m.d.slow += cnt_in.eq(cnt_in + 1)
-        m.d.comb += clk_in.eq(cnt_in == 0)
-        m.d.comb += ClockSignal("in").eq(clk_in)
+        m.submodules += ClockDivider(
+            divisor=width_in,
+            cd_in="slow",
+            cd_out="gb_in",
+        )
 
-        m.domains += ClockDomain("out")
-        cnt_out = Signal(range(width_in))
-        clk_out = Signal()
-        with m.If(cnt_out == (width_in - 1)):
-            m.d.slow += cnt_out.eq(0)
-        with m.Else():
-            m.d.slow += cnt_out.eq(cnt_out + 1)
-        m.d.comb += clk_out.eq(cnt_out == 0)
-        m.d.comb += ClockSignal("out").eq(clk_out)
-        ####
+        m.submodules += ClockDivider(
+            divisor=width_out,
+            cd_in="slow",
+            cd_out="gb_out",
+        )
 
         m.submodules.gearbox = gearbox = Gearbox(
             width_in=width_in,
             width_out=width_out,
-            domain_in="in",
-            domain_out="out",
+            domain_in="gb_in",
+            domain_out="gb_out",
             depth=3,
         )
 
