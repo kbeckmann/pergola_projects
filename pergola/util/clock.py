@@ -2,7 +2,7 @@ from nmigen import *
 from nmigen.utils import log2_int
 
 class ClockDividerInterface:
-    def __init__(self, divisor, cd_out, cd_in="sync"):
+    def __init__(self, divisor, cd_out, cd_in):
         self.divisor = int(divisor)
         self.cd_out = cd_out
         self.cd_in = cd_in
@@ -10,7 +10,7 @@ class ClockDividerInterface:
         self.clk = Signal()
 
 class ClockDividerNPOT(Elaboratable, ClockDividerInterface):
-    def __init__(self, divisor, cd_out, cd_in="sync"):
+    def __init__(self, divisor, cd_out, cd_in):
         super().__init__(divisor=divisor, cd_out=cd_out, cd_in=cd_in)
 
     def elaborate(self, platform):
@@ -52,7 +52,7 @@ class ClockDividerNPOT(Elaboratable, ClockDividerInterface):
 
 
 class ClockDividerPOT(Elaboratable, ClockDividerInterface):
-    def __init__(self, divisor, cd_out, cd_in="sync"):
+    def __init__(self, divisor, cd_out, cd_in):
         super().__init__(divisor=divisor, cd_out=cd_out, cd_in=cd_in)
 
     def elaborate(self, platform):
