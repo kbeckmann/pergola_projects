@@ -33,6 +33,7 @@ class Applet(Elaboratable):
         pass
 
 from . import blinky
+from . import clock_divider
 from . import delayf
 from . import dvid
 from . import dvid_splitter
