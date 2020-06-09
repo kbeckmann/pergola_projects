@@ -4,6 +4,7 @@ from argparse import RawTextHelpFormatter
 from nmigen.back.pysim import Simulator
 from .applets import *
 from .platform.pergola import PergolaPlatform
+from .platform.verilator import VerilatorPlatform
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +54,13 @@ def main():
         help="builds an applet bitstream")
     add_common_parsers(p_build)
 
-    for action_parser in [p_run, p_build]:
+    p_sim = subparsers.add_parser(
+        "sim",
+        description="Builds a verilator simulator",
+        help="Builds a verilator simulator")
+    add_common_parsers(p_sim)
+
+    for action_parser in [p_run, p_build, p_sim]:
         p_action_applet = action_parser.add_subparsers(dest="applet", metavar="APPLET")
         for applet in Applet.all.values():
             subparser = p_action_applet.add_parser(
@@ -84,8 +91,12 @@ def main():
     }
 
     applet_cls = Applet.all[args.applet]
-    platform = PergolaPlatform()
-    platform.build(applet_cls(args=args), **build_args)
+    if args.action == "sim":
+        platform = VerilatorPlatform()
+        platform.build(applet_cls(args=args))
+    else:
+        platform = PergolaPlatform()
+        platform.build(applet_cls(args=args), **build_args)
 
 if __name__ == "__main__":
     main()
