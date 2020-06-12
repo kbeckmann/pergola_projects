@@ -57,7 +57,7 @@ class RadioTXApplet(Applet, applet_name="radio-tx"):
         pll1_freq_mhz = 147.2
         carrier_freq_mhz = 434
 
-        sync_clk_freq = platform.lookup(platform.default_clk).clock.frequency
+        sync_clk_freq = platform.default_clk_frequency
 
         m.submodules.pll1 = ECP5PLL([
                 ECP5PLLConfig("clk_pll1", pll1_freq_mhz, error=0.0001),
