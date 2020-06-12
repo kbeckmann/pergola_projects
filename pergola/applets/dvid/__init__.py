@@ -1,6 +1,7 @@
 from nmigen import *
 from nmigen.lib.cdc import FFSynchronizer
 from nmigen.back.pysim import Simulator, Active
+from nmigen.back import cxxrtl
 from nmigen.test.utils import FHDLTestCase
 from nmigen.asserts import *
 from nmigen.build.dsl import *
@@ -10,6 +11,65 @@ from ...gateware.vga import VGAOutput, VGAOutputSubtarget, VGAParameters
 from ...gateware.vga2dvid import VGA2DVID
 from ...util.ecp5pll import ECP5PLL, ECP5PLLConfig
 
+
+class StaticTestImageGenerator(Elaboratable):
+    def __init__(self, vsync, v_ctr, h_ctr, r, g, b):
+        self.vsync = vsync
+        self.v_ctr = v_ctr
+        self.h_ctr = h_ctr
+        self.r = r
+        self.g = g
+        self.b = b
+
+    def elaborate(self, platform):
+        m = Module()
+
+        m.d.sync += self.r.eq(self.h_ctr)
+        m.d.sync += self.g.eq(self.v_ctr)
+        m.d.sync += self.b.eq(127)
+
+        return m
+
+
+class TestImageGenerator(Elaboratable):
+    def __init__(self, vsync, v_ctr, h_ctr, r, g, b):
+        self.vsync = vsync
+        self.v_ctr = v_ctr
+        self.h_ctr = h_ctr
+        self.r = r
+        self.g = g
+        self.b = b
+        self.frame = Signal(16)
+
+    def elaborate(self, platform):
+        m = Module()
+
+        vsync = self.vsync
+        v_ctr = self.v_ctr
+        h_ctr = self.h_ctr
+        r = self.r
+        g = self.g
+        b = self.b
+
+        frame = self.frame
+        vsync_r = Signal()
+        m.d.sync += vsync_r.eq(vsync)
+        with m.If(~vsync_r & vsync):
+            m.d.sync += frame.eq(frame + 1)
+
+        frame_tri = Mux(frame[8], ~frame[:8], frame[:8])
+        frame_tri2 = Mux(frame[9], ~frame[1:9], frame[1:9])
+
+
+        dir1 = Mux(v_ctr[6], 1, -1)
+        X = (h_ctr + dir1 * frame[1:])
+        Y = (v_ctr * 2) >> 1
+
+        m.d.sync += r.eq(frame_tri[1:])
+        m.d.sync += g.eq(v_ctr * Mux(X & Y, 255, 0))
+        m.d.sync += b.eq(~(frame_tri2+(X ^ Y))*255)
+
+        return m
 
 class DVIDSignalGeneratorXDR(Elaboratable):
     def __init__(self, dvid_out_clk, dvid_out, vga_parameters, pll1_freq_mhz, pixel_freq_mhz, xdr=1, skip_pll_checks=False, invert_outputs=[0, 0, 0, 0]):
@@ -131,6 +191,14 @@ class DVIDSignalGeneratorXDR(Elaboratable):
             xdr=xdr
         )
 
+        m.submodules += TestImageGenerator(
+            vsync=vga_output.vs,
+            h_ctr=m.submodules.vga.v_ctr,
+            v_ctr=m.submodules.vga.h_ctr,
+            r=r,
+            g=g,
+            b=b)
+
         # Store output bits in separate registers
         #
         # Also invert signals based on parameters
@@ -197,37 +265,6 @@ class DVIDSignalGeneratorXDR(Elaboratable):
                 self.dvid_out.o5.eq(Cat(pixel_b_r[5], pixel_g_r[5], pixel_r_r[5])),
                 self.dvid_out.o6.eq(Cat(pixel_b_r[6], pixel_g_r[6], pixel_r_r[6])),
             ]
-
-
-        # Test image generator
-        frame = Signal(16)
-        vsync_r = Signal()
-        m.d.sync += vsync_r.eq(vga_output.vs)
-        with m.If(~vsync_r & vga_output.vs):
-            m.d.sync += frame.eq(frame + 1)
-
-        # Blink an LED for each frame
-        led = platform.request("led", 0)
-        m.d.comb += led.eq(frame[0])
-
-        frame_tri = Mux(frame[8], ~frame[:8], frame[:8])
-        frame_tri2 = Mux(frame[9], ~frame[1:9], frame[1:9])
-
-        v_ctr = m.submodules.vga.v_ctr
-        h_ctr = m.submodules.vga.h_ctr
-
-        dir1 = Mux(v_ctr[6], 1, -1)
-        X = (h_ctr + dir1 * frame[1:])
-        Y = (v_ctr * 2) >> 1
-
-        m.d.sync += r.eq(frame_tri[1:])
-        m.d.sync += g.eq(v_ctr * Mux(X & Y, 255, 0))
-        m.d.sync += b.eq(~(frame_tri2+(X ^ Y))*255)
-
-        # Cycle colors
-        # m.d.sync += r.eq(Mux(frame[5], 255, 0))
-        # m.d.sync += g.eq(Mux(frame[6], 255, 0))
-        # m.d.sync += b.eq(Mux(frame[7], 255, 0))
 
         return m
 
@@ -538,3 +575,146 @@ class DVIDTest(FHDLTestCase):
         sim.add_sync_process(process)
         with sim.write_vcd("dvid_vga2dvid.vcd"):
             sim.run()
+
+class DVIDSim(FHDLTestCase):
+    """
+    This is not pretty but it works!
+    """
+
+    def test_dvid_cxxrtl(self):
+
+        import os
+        import subprocess
+
+        led = Signal()
+        btn = Signal()
+
+        m = Module()
+
+        vga_output = Record([
+            ('hs', 1),
+            ('vs', 1),
+            ('blank', 1),
+        ])
+
+        r = Signal(8)
+        g = Signal(8)
+        b = Signal(8)
+
+        m.submodules.vga = VGAOutputSubtarget(
+            output=vga_output,
+            vga_parameters=dvid_configs["640x480p60"].vga_parameters,
+        )
+
+        vs = vga_output.vs
+        v_ctr = m.submodules.vga.v_ctr
+        h_ctr = m.submodules.vga.h_ctr
+
+        m.submodules.imagegen = TestImageGenerator(
+            vsync=vga_output.vs,
+            h_ctr=m.submodules.vga.h_ctr,
+            v_ctr=m.submodules.vga.v_ctr,
+            r=r,
+            g=g,
+            b=b)
+
+        frame = m.submodules.imagegen.frame
+
+        output = cxxrtl.convert(m, ports=(frame, vs, v_ctr, h_ctr, r, g, b))
+
+        root = os.path.join("build")
+        filename = os.path.join(root, "top.cpp")
+        elfname = os.path.join(root, "top.elf")
+
+        with open(filename, "w") as f:
+            f.write(output)
+            f.write(r"""
+
+#include <iostream>
+#include <fstream>
+#include "SDL2/SDL.h"
+
+int main()
+{
+    int width = 640;
+    int height = 480;
+    int bpp = 3;
+    uint8_t pixels[width * height * bpp];
+    memset(pixels, '', width * height * bpp);
+
+    if(SDL_Init(SDL_INIT_VIDEO) != 0) {
+        fprintf(stderr, "Could not init SDL: %s\n", SDL_GetError());
+        return 1;
+    }
+    SDL_Window *screen = SDL_CreateWindow("cxxrtl",
+            SDL_WINDOWPOS_UNDEFINED,
+            SDL_WINDOWPOS_UNDEFINED,
+            width, height,
+            0);
+    if(!screen) {
+        fprintf(stderr, "Could not create window\n");
+        return 1;
+    }
+    SDL_Renderer *renderer = SDL_CreateRenderer(screen, -1, SDL_RENDERER_SOFTWARE);
+    if(!renderer) {
+        fprintf(stderr, "Could not create renderer\n");
+        return 1;
+    }
+
+    SDL_Texture* framebuffer = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB24, SDL_TEXTUREACCESS_STREAMING, width, height);
+
+    cxxrtl_design::p_top top;
+
+    for (int i = 0; i < 1000; i++) {
+        size_t ctr = 0;
+        value<1> old_vs{0u};
+        // Render one frame
+        while (true) {
+            top.step();
+            top.p_clk = value<1>{0u};
+            top.step();
+            top.p_clk = value<1>{1u};
+
+            if (top.p_vga_2e_h__en.curr && top.p_vga_2e_v__en.curr && ctr < width*height*bpp) {
+                pixels[ctr++] = (uint8_t) top.p_r.data[0];
+                pixels[ctr++] = (uint8_t) top.p_g.data[0];
+                pixels[ctr++] = (uint8_t) top.p_b.data[0];
+            }
+
+            // Break when vsync goes low again
+            if (old_vs && !top.p_vga_2e_output__vs.curr)
+                break;
+            old_vs = top.p_vga_2e_output__vs.curr;
+        }
+
+        SDL_UpdateTexture(framebuffer, NULL, pixels, width * bpp);
+        SDL_RenderClear(renderer);
+        SDL_RenderCopy(renderer, framebuffer, NULL, NULL);
+        SDL_RenderPresent(renderer);
+
+        SDL_Event event;
+        if (SDL_PollEvent(&event)) {
+            if (event.type == SDL_KEYDOWN)
+                break;
+        }
+
+        // SDL_Delay(10);
+
+        std::cout << "frame " << " " << top.p_imagegen_2e_frame.curr << std::endl;
+    }
+
+
+    SDL_DestroyWindow(screen);
+    SDL_Quit();
+    return 0;
+}
+
+            """)
+            f.close()
+
+        print(subprocess.check_call([
+            "clang++", "-I", "/usr/share/yosys/include",
+            "-O3", "-std=c++11", "-lSDL2", "-o", elfname, filename]))
+
+        print(subprocess.check_call([elfname]))
+
