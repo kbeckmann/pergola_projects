@@ -641,6 +641,10 @@ int main()
     int width = 640;
     int height = 480;
     int bpp = 3;
+    int frames = 0;
+    unsigned int lastTime = 0;
+    unsigned int currentTime;
+
     uint8_t pixels[width * height * bpp];
     memset(pixels, '', width * height * bpp);
 
@@ -702,7 +706,15 @@ int main()
 
         // SDL_Delay(10);
 
-        std::cout << "frame " << " " << top.p_imagegen_2e_frame.curr << std::endl;
+        frames++;
+
+        currentTime = SDL_GetTicks();
+        float delta = currentTime - lastTime;
+        if (delta >= 1000) {
+            std::cout << "FPS: " << (frames / (delta / 1000.0f)) << std::endl;
+            lastTime = currentTime;
+            frames = 0;
+        }
     }
 
 
@@ -716,7 +728,7 @@ int main()
 
         print(subprocess.check_call([
             "clang++", "-I", "/usr/share/yosys/include",
-            "-O3", "-std=c++11", "-lSDL2", "-o", elfname, filename]))
+            "-O3", "-mllvm", "-inline-threshold=999999", "-std=c++11", "-lSDL2", "-o", elfname, filename]))
 
         print(subprocess.check_call([elfname]))
 
