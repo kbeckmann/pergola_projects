@@ -32,7 +32,7 @@ class StaticTestImageGenerator(Elaboratable):
 
 
 class TestImageGenerator(Elaboratable):
-    def __init__(self, vsync, v_ctr, h_ctr, r, g, b):
+    def __init__(self, vsync, v_ctr, h_ctr, r, g, b, speed=1):
         self.vsync = vsync
         self.v_ctr = v_ctr
         self.h_ctr = h_ctr
@@ -40,6 +40,7 @@ class TestImageGenerator(Elaboratable):
         self.g = g
         self.b = b
         self.frame = Signal(16)
+        self.speed = speed
 
     def elaborate(self, platform):
         m = Module()
@@ -62,7 +63,7 @@ class TestImageGenerator(Elaboratable):
 
 
         dir1 = Mux(v_ctr[6], 1, -1)
-        X = (h_ctr + dir1 * frame[1:])
+        X = (h_ctr + dir1 * frame[self.speed:])
         Y = (v_ctr * 2) >> 1
 
         m.d.sync += r.eq(frame_tri[1:])
@@ -616,7 +617,8 @@ class DVIDSim(FHDLTestCase):
             v_ctr=m.submodules.vga.v_ctr,
             r=r,
             g=g,
-            b=b)
+            b=b,
+            speed=0)
 
         frame = m.submodules.imagegen.frame
 
