@@ -75,7 +75,7 @@ class RadioTXApplet(Applet, applet_name="radio-tx"):
 
         # First order "sigma-delta" @ 16MHz (sync_clk_freq)
         pdm_in = Signal(8)
-        pdm = Signal(pdm_in.shape().width + 1)
+        pdm = Signal(len(pdm_in) + 1)
         m.d.sync += pdm.eq(pdm[:-1] + pdm_in)
 
         if self.file:
