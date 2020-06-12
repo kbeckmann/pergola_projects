@@ -17,7 +17,7 @@ class Blinky(Elaboratable):
         m = Module()
 
         m.d.sync += self.timer.eq(self.timer + 1)
-        m.d.comb += self.led.o.eq(self.blink)
+        m.d.comb += self.led.eq(self.blink)
 
         with m.If(self.btn):
             m.d.comb += self.blink.eq(1)
@@ -29,9 +29,8 @@ class Blinky(Elaboratable):
 
 class BlinkyTest(FHDLTestCase):
     def test_blinky(self):
-        from nmigen.compat.fhdl.specials import TSTriple
         btn = Signal()
-        led = TSTriple()
+        led = Signal()
         m = Module()
         blinky = m.submodules.blinky = Blinky(led, btn)
 
@@ -53,15 +52,14 @@ class BlinkyTest(FHDLTestCase):
             sim.run()
 
     def test_blinky_formal(self):
-        from nmigen.compat.fhdl.specials import TSTriple
         btn = Signal()
-        led = TSTriple()
+        led = Signal()
 
         m = Module()
         m.submodules.blinky = Blinky(led, btn)
 
         # If the button is pressed, the led should always be on
-        m.d.comb += Assert(btn.implies(led.o))
+        m.d.comb += Assert(btn.implies(led))
 
         self.assertFormal(m, depth=10)
 
@@ -79,6 +77,6 @@ class BlinkyApplet(Applet, applet_name="blinky"):
 
         m = Module()
 
-        m.submodules.blinky = Blinky(led, btn)
+        m.submodules.blinky = Blinky(led.o, btn)
 
         return m
