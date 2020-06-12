@@ -676,10 +676,13 @@ int main()
         value<1> old_vs{0u};
         // Render one frame
         while (true) {
-            top.step();
-            top.p_clk = value<1>{0u};
-            top.step();
+            //top.step();
+            //top.p_clk = value<1>{0u};
+
+            // Inofficial cxxrtl hack that improves performance
+            top.prev_p_clk = value<1>{0u};
             top.p_clk = value<1>{1u};
+            top.step();
 
             if (top.p_vga_2e_h__en.curr && top.p_vga_2e_v__en.curr && ctr < width*height*bpp) {
                 pixels[ctr++] = (uint8_t) top.p_r.data[0];
@@ -728,7 +731,7 @@ int main()
 
         print(subprocess.check_call([
             "clang++", "-I", "/usr/share/yosys/include",
-            "-O3", "-mllvm", "-inline-threshold=999999", "-std=c++11", "-lSDL2", "-o", elfname, filename]))
+            "-O3", "-fno-exceptions", "-mllvm", "-inline-threshold=999", "-std=c++11", "-lSDL2", "-o", elfname, filename]))
 
         print(subprocess.check_call([elfname]))
 
