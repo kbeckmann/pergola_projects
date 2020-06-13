@@ -602,7 +602,7 @@ class DVIDSim(FHDLTestCase):
 
         m.submodules.vga = VGAOutputSubtarget(
             output=vga_output,
-            vga_parameters=dvid_configs["640x480p60"].vga_parameters,
+            vga_parameters=dvid_configs["1280x720p60"].vga_parameters,
         )
 
         vs = vga_output.vs
@@ -634,8 +634,8 @@ class DVIDSim(FHDLTestCase):
 
 int main()
 {
-    const int width = 640;
-    const int height = 480;
+    const int width = 1280;
+    const int height = 720;
     const int bpp = 3;
 
     static uint8_t pixels[width * height * bpp];
