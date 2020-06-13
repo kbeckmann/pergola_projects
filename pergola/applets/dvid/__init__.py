@@ -636,15 +636,18 @@ class DVIDSim(FHDLTestCase):
 
 int main()
 {
-    int width = 640;
-    int height = 480;
-    int bpp = 3;
+    const int width = 640;
+    const int height = 480;
+    const int bpp = 3;
+
+    static uint8_t pixels[width * height * bpp];
+
     int frames = 0;
     unsigned int lastTime = 0;
     unsigned int currentTime;
 
-    uint8_t pixels[width * height * bpp];
-    memset(pixels, '', width * height * bpp);
+    // Set this to 0 to disable vsync
+    unsigned int flags = SDL_RENDERER_PRESENTVSYNC;
 
     if(SDL_Init(SDL_INIT_VIDEO) != 0) {
         fprintf(stderr, "Could not init SDL: %s\n", SDL_GetError());
@@ -659,7 +662,7 @@ int main()
         fprintf(stderr, "Could not create window\n");
         return 1;
     }
-    SDL_Renderer *renderer = SDL_CreateRenderer(screen, -1, SDL_RENDERER_SOFTWARE);
+    SDL_Renderer *renderer = SDL_CreateRenderer(screen, -1, flags);
     if(!renderer) {
         fprintf(stderr, "Could not create renderer\n");
         return 1;
@@ -682,7 +685,7 @@ int main()
             top.p_clk = value<1>{1u};
             top.step();
 
-            if (top.p_vga_2e_h__en.curr && top.p_vga_2e_v__en.curr && ctr < width*height*bpp) {
+            if (top.p_vga_2e_h__en.curr && top.p_vga_2e_v__en.curr && ctr < width * height * bpp) {
                 pixels[ctr++] = (uint8_t) top.p_r.data[0];
                 pixels[ctr++] = (uint8_t) top.p_g.data[0];
                 pixels[ctr++] = (uint8_t) top.p_b.data[0];
@@ -695,7 +698,6 @@ int main()
         }
 
         SDL_UpdateTexture(framebuffer, NULL, pixels, width * bpp);
-        SDL_RenderClear(renderer);
         SDL_RenderCopy(renderer, framebuffer, NULL, NULL);
         SDL_RenderPresent(renderer);
 
