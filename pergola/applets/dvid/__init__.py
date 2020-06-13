@@ -61,9 +61,7 @@ class TestImageGenerator(Elaboratable):
         frame_tri = Mux(frame[8], ~frame[:8], frame[:8])
         frame_tri2 = Mux(frame[9], ~frame[1:9], frame[1:9])
 
-
-        dir1 = Mux(v_ctr[6], 1, -1)
-        X = (h_ctr + dir1 * frame[self.speed:])
+        X = Mux(v_ctr[6], h_ctr + frame[self.speed:], h_ctr - frame[self.speed:])
         Y = (v_ctr * 2) >> 1
 
         m.d.sync += r.eq(frame_tri[1:])
