@@ -606,8 +606,8 @@ class DVIDSim(FHDLTestCase):
         )
 
         vs = vga_output.vs
-        v_ctr = m.submodules.vga.v_ctr
-        h_ctr = m.submodules.vga.h_ctr
+        v_en = m.submodules.vga.v_en
+        h_en = m.submodules.vga.h_en
 
         m.submodules.imagegen = TestImageGenerator(
             vsync=vga_output.vs,
@@ -618,9 +618,7 @@ class DVIDSim(FHDLTestCase):
             b=b,
             speed=0)
 
-        frame = m.submodules.imagegen.frame
-
-        output = cxxrtl.convert(m, ports=(frame, vs, v_ctr, h_ctr, r, g, b))
+        output = cxxrtl.convert(m, ports=(vs, v_en, h_en, r, g, b))
 
         root = os.path.join("build")
         filename = os.path.join(root, "top.cpp")
@@ -685,16 +683,16 @@ int main()
             top.p_clk = value<1>{1u};
             top.step();
 
-            if (top.p_vga_2e_h__en.curr && top.p_vga_2e_v__en.curr && ctr < width * height * bpp) {
+            if (top.p_h__en && top.p_v__en && ctr < width * height * bpp) {
                 pixels[ctr++] = (uint8_t) top.p_r.data[0];
                 pixels[ctr++] = (uint8_t) top.p_g.data[0];
                 pixels[ctr++] = (uint8_t) top.p_b.data[0];
             }
 
             // Break when vsync goes low again
-            if (old_vs && !top.p_vga_2e_output__vs.curr)
+            if (old_vs && !top.p_vga__output____vs)
                 break;
-            old_vs = top.p_vga_2e_output__vs.curr;
+            old_vs = top.p_vga__output____vs;
         }
 
         SDL_UpdateTexture(framebuffer, NULL, pixels, width * bpp);
