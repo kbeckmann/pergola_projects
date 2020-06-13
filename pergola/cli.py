@@ -21,8 +21,8 @@ def add_common_parsers(parser):
         help="Enable flow3")
 
     parser.add_argument(
-        "--abc9", default=0, action="count",
-        help="Enable abc9")
+        "--noabc9", default=0, action="count",
+        help="Disable abc9")
 
     parser.add_argument(
         "--nowidelut", default=0, action="count",
@@ -69,7 +69,7 @@ def main():
         logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 
     synth_opts = " ".join([
-        "-abc9" if args.abc9 else "",
+        "-abc9" if not args.noabc9 else "",
         "-nowidelut" if args.nowidelut else "",
         "-dff" if args.dff else ""
     ])
