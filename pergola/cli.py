@@ -77,10 +77,10 @@ def main():
     build_args = {
         "nextpnr_opts": "--timing-allow-fail" if args.timing_allow_fail else "",
         "ecppack_opts": "--compress",
-        "yosys_opts":   "-p show" if args.dot else "",
+        "yosys_opts": "-p show" if args.dot else "",
         "script_after_read": "scratchpad -copy abc9.script.flow3 abc9.script" if args.flow3 else "",
         "synth_opts": synth_opts,
-        "do_program":   args.action == "run",
+        "do_program": args.action == "run",
     }
 
     applet_cls = Applet.all[args.applet]
