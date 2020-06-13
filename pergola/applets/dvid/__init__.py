@@ -731,7 +731,7 @@ int main()
 
         print(subprocess.check_call([
             "clang++", "-I", "/usr/share/yosys/include",
-            "-O3", "-fno-exceptions", "-mllvm", "-inline-threshold=999", "-std=c++11", "-lSDL2", "-o", elfname, filename]))
+            "-O3", "-fno-exceptions", "-std=c++11", "-lSDL2", "-o", elfname, filename]))
 
         print(subprocess.check_call([elfname]))
 
