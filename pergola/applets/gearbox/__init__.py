@@ -41,7 +41,7 @@ class GearboxExampleApplet(Applet, applet_name="gearbox"):
         m = Module()
 
         m.submodules += ClockDivider(
-            divisor=16e6 / 2, # 2Hz
+            divisor=platform.default_clk_frequency / 2, # 2Hz
             cd_out="slow",
         )
 
