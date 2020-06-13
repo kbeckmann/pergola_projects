@@ -1,6 +1,8 @@
 # Pergola projects
 
-These are my personal pergola projects. They are unsupported, full of bugs and probably not doing things correctly anyway.
+[Pergola](https://github.com/pergola-fpga/pergola) is an ECP5 FPGA development board.
+
+These are my personal projects that run on Pergola. They are unsupported, probably full of bugs and most likely doing some things incorrectly.
 
 Verilog projects are located in `verilog`. Change working directory to a project and type `make` to build, `make prog` to build and program.
 
