@@ -192,8 +192,8 @@ class DVIDSignalGeneratorXDR(Elaboratable):
 
         m.submodules += TestImageGenerator(
             vsync=vga_output.vs,
-            h_ctr=m.submodules.vga.h_ctr,
-            v_ctr=m.submodules.vga.v_ctr,
+            h_ctr=m.submodules.vga.v_ctr,
+            v_ctr=m.submodules.vga.h_ctr,
             r=r,
             g=g,
             b=b)
@@ -395,7 +395,7 @@ class DVIDApplet(Applet, applet_name="dvid"):
 
     Can use SDR, DDR, DDRx2, DDRx7:1 to serialize the output.
 
-    DDRx7:1 was made just to see if it works - it does, but it's really not a 
+    DDRx7:1 was made just to see if it works - it does, but it's really not a
     good fit because of the odd ratio 7:1.
 
     1920x1080p60 can be achieved with DDRx2, however it violates the timings of
@@ -618,7 +618,29 @@ class DVIDSim(FHDLTestCase):
             b=b,
             speed=0)
 
-        output = cxxrtl.convert(m, ports=(vs, v_en, h_en, r, g, b))
+        m.submodules.vga_phy = Instance("vga_phy",
+            p_width=1280,
+            p_height=720,
+            i_clk=ClockSignal(),
+            i_hs=h_en,
+            i_vs=v_en,
+            i_r=r,
+            i_g=g,
+            i_b=b)
+
+        output = cxxrtl.convert(m, black_boxes={"vga_phy": r"""
+attribute \cxxrtl_blackbox 1
+attribute \blackbox 1
+module \vga_phy
+  attribute \cxxrtl_edge "p"
+  wire input 1 \clk
+  wire input 2 \hs
+  wire input 3 \vs
+  wire width 8 input 4 \r
+  wire width 8 input 5 \g
+  wire width 8 input 6 \b
+end
+"""})
 
         root = os.path.join("build")
         filename = os.path.join(root, "top.cpp")
@@ -627,99 +649,117 @@ class DVIDSim(FHDLTestCase):
         with open(filename, "w") as f:
             f.write(output)
             f.write(r"""
-
 #include <iostream>
 #include <fstream>
-#include "SDL2/SDL.h"
+#include <SDL2/SDL.h>
+
+struct sdl_vga_phy : public cxxrtl_design::bb_p_vga__phy {
+    SDL_Window *window = nullptr;
+    SDL_Renderer *renderer = nullptr;
+    SDL_Texture *framebuffer = nullptr;
+    size_t stride;
+
+    std::vector<uint8_t> pixels;
+    size_t beamAt = 0;
+    size_t frames = 0;
+
+    bool init(std::string name, unsigned width, unsigned height) {
+        if (SDL_Init(SDL_INIT_VIDEO) != 0)
+            return false;
+
+        window = SDL_CreateWindow(name.c_str(),
+            SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
+            width, height,
+            0);
+        if (window == nullptr)
+            return false;
+
+        renderer = SDL_CreateRenderer(window, -1,
+            SDL_RENDERER_PRESENTVSYNC);
+        if (renderer == nullptr)
+            return false;
+
+        framebuffer = SDL_CreateTexture(renderer,
+            SDL_PIXELFORMAT_RGB24, SDL_TEXTUREACCESS_STREAMING,
+            width, height);
+        if (framebuffer == nullptr)
+            return false;
+
+        pixels.resize(width * height * 3);
+        stride = width * 3;
+        return true;
+    }
+
+    ~sdl_vga_phy() {
+        if (framebuffer)
+            SDL_DestroyTexture(framebuffer);
+        if (renderer)
+            SDL_DestroyRenderer(renderer);
+        if (window)
+            SDL_DestroyWindow(window);
+    }
+
+  bool eval() override {
+    if (posedge_p_clk()) {
+        if (bool(p_hs) && bool(p_vs) && beamAt < pixels.size()) {
+            pixels[beamAt++] = p_r.data[0];
+            pixels[beamAt++] = p_g.data[0];
+            pixels[beamAt++] = p_b.data[0];
+        }
+        if (!bool(p_vs) && beamAt == pixels.size()) {
+            SDL_UpdateTexture(framebuffer, NULL, pixels.data(), stride);
+            SDL_RenderCopy(renderer, framebuffer, NULL, NULL);
+            SDL_RenderPresent(renderer);
+            beamAt = 0;
+            frames++;
+        }
+    }
+    return true;
+  }
+};
+
+namespace cxxrtl_design {
+
+std::unique_ptr<bb_p_vga__phy>
+bb_p_vga__phy::create(std::string name,
+                      cxxrtl::metadata_map parameters,
+                      cxxrtl::metadata_map attributes) {
+  std::unique_ptr<sdl_vga_phy> phy {new sdl_vga_phy};
+  assert(phy->init(name, parameters.at("width").as_uint(), parameters.at("height").as_uint()));
+  return phy;
+}
+
+}
 
 int main()
 {
-    const int width = 1280;
-    const int height = 720;
-    const int bpp = 3;
-
-    static uint8_t pixels[width * height * bpp];
-
-    int frames = 0;
-    unsigned int lastTime = 0;
-    unsigned int currentTime;
-
-    // Set this to 0 to disable vsync
-    unsigned int flags = SDL_RENDERER_PRESENTVSYNC;
-
-    if(SDL_Init(SDL_INIT_VIDEO) != 0) {
-        fprintf(stderr, "Could not init SDL: %s\n", SDL_GetError());
-        return 1;
-    }
-    SDL_Window *screen = SDL_CreateWindow("cxxrtl",
-            SDL_WINDOWPOS_UNDEFINED,
-            SDL_WINDOWPOS_UNDEFINED,
-            width, height,
-            0);
-    if(!screen) {
-        fprintf(stderr, "Could not create window\n");
-        return 1;
-    }
-    SDL_Renderer *renderer = SDL_CreateRenderer(screen, -1, flags);
-    if(!renderer) {
-        fprintf(stderr, "Could not create renderer\n");
-        return 1;
-    }
-
-    SDL_Texture* framebuffer = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB24, SDL_TEXTUREACCESS_STREAMING, width, height);
-
     cxxrtl_design::p_top top;
+    sdl_vga_phy *vga_phy = static_cast<sdl_vga_phy*>(top.cell_p_vga__phy.get());
 
-    for (int i = 0; i < 1000; i++) {
-        size_t ctr = 0;
-        value<1> old_vs{0u};
-        // Render one frame
-        while (true) {
-            //top.step();
-            //top.p_clk = value<1>{0u};
-
-            // Inofficial cxxrtl hack that improves performance
-            top.prev_p_clk = value<1>{0u};
+    unsigned lastTime = 0;
+    while (1) {
+        for (unsigned steps = 0; steps < 100000; steps++) {
+            top.p_clk = value<1>{0u};
+            top.step();
             top.p_clk = value<1>{1u};
             top.step();
-
-            if (top.p_h__en && top.p_v__en && ctr < width * height * bpp) {
-                pixels[ctr++] = (uint8_t) top.p_r.data[0];
-                pixels[ctr++] = (uint8_t) top.p_g.data[0];
-                pixels[ctr++] = (uint8_t) top.p_b.data[0];
-            }
-
-            // Break when vsync goes low again
-            if (old_vs && !top.p_vga__output____vs)
-                break;
-            old_vs = top.p_vga__output____vs;
         }
 
-        SDL_UpdateTexture(framebuffer, NULL, pixels, width * bpp);
-        SDL_RenderCopy(renderer, framebuffer, NULL, NULL);
-        SDL_RenderPresent(renderer);
+        unsigned currentTime = SDL_GetTicks();
+        float delta = currentTime - lastTime;
+        if (delta >= 1000) {
+            std::cout << "FPS: " << (vga_phy->frames / (delta / 1000.0f)) << std::endl;
+            vga_phy->frames = 0;
+            lastTime = currentTime;
+        }
 
         SDL_Event event;
         if (SDL_PollEvent(&event)) {
             if (event.type == SDL_KEYDOWN)
                 break;
         }
-
-        // SDL_Delay(10);
-
-        frames++;
-
-        currentTime = SDL_GetTicks();
-        float delta = currentTime - lastTime;
-        if (delta >= 1000) {
-            std::cout << "FPS: " << (frames / (delta / 1000.0f)) << std::endl;
-            lastTime = currentTime;
-            frames = 0;
-        }
     }
 
-
-    SDL_DestroyWindow(screen);
     SDL_Quit();
     return 0;
 }
@@ -732,4 +772,3 @@ int main()
             "-O3", "-fno-exceptions", "-std=c++11", "-lSDL2", "-o", elfname, filename]))
 
         print(subprocess.check_call([elfname]))
-
