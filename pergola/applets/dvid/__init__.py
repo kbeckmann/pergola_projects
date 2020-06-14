@@ -192,8 +192,8 @@ class DVIDSignalGeneratorXDR(Elaboratable):
 
         m.submodules += TestImageGenerator(
             vsync=vga_output.vs,
-            h_ctr=m.submodules.vga.v_ctr,
-            v_ctr=m.submodules.vga.h_ctr,
+            h_ctr=m.submodules.vga.h_ctr,
+            v_ctr=m.submodules.vga.v_ctr,
             r=r,
             g=g,
             b=b)
