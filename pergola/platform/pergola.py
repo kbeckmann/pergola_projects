@@ -73,36 +73,44 @@ class PergolaPlatform(LatticeECP5Platform):
         openocd = os.environ.get("OPENOCD", "openocd")
         interface = os.environ.get("INTERFACE", "/dev/ttyACM0")
         if interface == "SiPEED" or interface == "busblaster":
-          if interface == "SiPEED":
-              args = ["-c", """
-                      interface ftdi
-                      ftdi_vid_pid 0x0403 0x6010
-                      ftdi_layout_init 0x0018 0x05fb
-                      ftdi_layout_signal nSRST -data 0x0010
-                  """]
-          elif interface == "busblaster":
-              args = ["-f", "interface/ftdi/dp_busblaster.cfg"]
+            if interface == "SiPEED":
+                args = ["-c", """
+                        interface ftdi
+                        ftdi_vid_pid 0x0403 0x6010
+                        ftdi_layout_init 0x0018 0x05fb
+                        ftdi_layout_signal nSRST -data 0x0010
+                    """]
+            elif interface == "busblaster":
+                args = ["-f", "interface/ftdi/dp_busblaster.cfg"]
 
-          with products.extract("{}-openocd.cfg".format(name), "{}.svf".format(name)) \
-                  as (config_filename, vector_filename):
-              subprocess.check_call([openocd,
-                  *args,
-                  "-f", config_filename,
-                  "-c", "transport select jtag; adapter_khz 10000; init; svf -quiet {}; exit".format(vector_filename)
-              ])
+            with products.extract("{}-openocd.cfg".format(name), "{}.svf".format(name)) \
+                    as (config_filename, vector_filename):
+                subprocess.check_call([openocd,
+                    *args,
+                    "-f", config_filename,
+                    "-c", "transport select jtag; adapter_khz 10000; init; svf -quiet {}; exit".format(vector_filename)
+                ])
+        elif interface == "pergola_bringup":
+            # Early bringup code
+            with products.extract("{}.bit".format(name)) as (bitstream):
+                print(subprocess.check_call(["bash", "-c", """
+                stty -F {} 300 raw -clocal -echo icrnl;
+                sleep 0.01;
+                cat {} & > /dev/null;
+                CATPID=$! ;
+                echo -n "$(stat -c%s {})\n" > {};
+                cp {} {};
+                sync;
+                sleep 1;
+                """.format(interface, interface, bitstream, interface, bitstream, interface)]))
+                #   kill $CATPID || true;
         else:
-          with products.extract("{}.bit".format(name)) as (bitstream):
-            print(subprocess.check_call(["bash", "-c", """
-              stty -F {} 300 raw -clocal -echo icrnl;
-              sleep 0.01;
-              cat {} & > /dev/null;
-              CATPID=$! ;
-              echo -n "$(stat -c%s {})\n" > {};
-              cp {} {};
-              sync;
-              sleep 1;
-            """.format(interface, interface, bitstream, interface, bitstream, interface)]))
-            #   kill $CATPID || true;
+            with products.extract("{}.bit".format(name)) as (bitstream):
+                print(subprocess.check_call([
+                    "hf2", "-v", "0x239a", "-p", "0x0058", "flash",
+                    "--file", bitstream, "--address", "0x70000000", "-s"
+                ]))
+
 
     def build(self, *args, **kwargs):
         LatticeECP5Platform.build(self, *args, **kwargs)
