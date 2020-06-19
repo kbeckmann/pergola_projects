@@ -702,9 +702,9 @@ struct sdl_vga_phy : public cxxrtl_design::bb_p_vga__phy {
   bool eval() override {
     if (posedge_p_clk()) {
         if (bool(p_hs) && bool(p_vs) && beamAt < pixels.size()) {
-            pixels[beamAt++] = p_r.data[0];
-            pixels[beamAt++] = p_g.data[0];
-            pixels[beamAt++] = p_b.data[0];
+            pixels[beamAt++] = p_r.get<uint8_t>();
+            pixels[beamAt++] = p_g.get<uint8_t>();
+            pixels[beamAt++] = p_b.get<uint8_t>();
         }
         if (!bool(p_vs) && beamAt == pixels.size()) {
             SDL_UpdateTexture(framebuffer, NULL, pixels.data(), stride);
@@ -739,9 +739,9 @@ int main()
     unsigned lastTime = 0;
     while (1) {
         for (unsigned steps = 0; steps < 100000; steps++) {
-            top.p_clk = value<1>{0u};
+            top.p_clk.set<uint32_t>(0);
             top.step();
-            top.p_clk = value<1>{1u};
+            top.p_clk.set<uint32_t>(1);
             top.step();
         }
 
@@ -769,6 +769,6 @@ int main()
 
         print(subprocess.check_call([
             "clang++", "-I", "/usr/share/yosys/include",
-            "-O3", "-fno-exceptions", "-std=c++11", "-lSDL2", "-o", elfname, filename]))
+            "-ggdb", "-O3", "-fno-exceptions", "-std=c++11", "-lSDL2", "-o", elfname, filename]))
 
         print(subprocess.check_call([elfname]))
