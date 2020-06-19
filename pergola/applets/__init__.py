@@ -40,4 +40,5 @@ from . import dvid_splitter
 from . import gearbox
 from . import pll
 from . import radio_tx
+from . import uart
 from . import xdr
