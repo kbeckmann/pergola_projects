@@ -149,27 +149,10 @@ class DVIDSignalGeneratorXDR(Elaboratable):
         g = Signal(8)
         b = Signal(8)
 
-        r_r = Signal(8)
-        g_r = Signal(8)
-        b_r = Signal(8)
-
-        blank_r = Signal()
-        hs_r = Signal()
-        vs_r = Signal()
-
-        m.submodules += FFSynchronizer(r, r_r, o_domain="sync", stages=3)
-        m.submodules += FFSynchronizer(g, g_r, o_domain="sync", stages=3)
-        m.submodules += FFSynchronizer(b, b_r, o_domain="sync", stages=3)
-
-        m.submodules += FFSynchronizer(vga_output.blank, blank_r, o_domain="sync", stages=5)
-        m.submodules += FFSynchronizer(vga_output.hs, hs_r, o_domain="sync", stages=5)
-        m.submodules += FFSynchronizer(vga_output.vs, vs_r, o_domain="sync", stages=5)
-
         pixel_r = Signal(xdr)
         pixel_g = Signal(xdr)
         pixel_b = Signal(xdr)
         pixel_clk = Signal(xdr)
-
 
         m.submodules.vga = VGAOutputSubtarget(
             output=vga_output,
@@ -177,12 +160,12 @@ class DVIDSignalGeneratorXDR(Elaboratable):
         )
 
         m.submodules.vga2dvid = VGA2DVID(
-            in_r = r_r,
-            in_g = g_r,
-            in_b = b_r,
-            in_blank = blank_r,
-            in_hsync = hs_r,
-            in_vsync = vs_r,
+            in_r = r,
+            in_g = g,
+            in_b = b,
+            in_blank = vga_output.blank,
+            in_hsync = vga_output.hs,
+            in_vsync = vga_output.vs,
             out_r = pixel_r,
             out_g = pixel_g,
             out_b = pixel_b,
@@ -768,7 +751,8 @@ int main()
             f.close()
 
         print(subprocess.check_call([
-            "clang++", "-I", "/usr/share/yosys/include",
+            # "clang++", "-I", "/usr/share/yosys/include",
+            "clang++", "-I", "/home/konrad/dev/yosys",
             "-ggdb", "-O3", "-fno-exceptions", "-std=c++11", "-lSDL2", "-o", elfname, filename]))
 
         print(subprocess.check_call([elfname]))
