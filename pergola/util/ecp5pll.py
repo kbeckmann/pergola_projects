@@ -160,13 +160,13 @@ class ECP5PLL(Elaboratable):
         return params
 
     def generate_secondary_output(self, params, channel, output, phase):
-        div = int(0.5 + params["fvco"] / output)
+        div = round(params["fvco"] / output)
         freq = params["fvco"] / div
 
         ns_shift = 1.0 / (freq * 1e6) * phase /  360.0
         phase_count = ns_shift * (params["fvco"] * 1e6)
-        cphase = int(0.5 + phase_count)
-        fphase = int(0.5 + (phase_count - cphase) * 8)
+        cphase = round(phase_count)
+        fphase = round((phase_count - cphase) * 8)
 
         ns_actual = 1.0 / (params["fvco"] * 1e6) * (cphase + fphase / 8.0)
         phase_shift = 360 * ns_actual / (1.0 / (freq * 1e6))
