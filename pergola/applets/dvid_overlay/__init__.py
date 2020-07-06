@@ -21,17 +21,17 @@ class DVIDOverlay(Elaboratable):
 
         m = Module()
 
-        sampled_b = Signal(10)
-        sampled_g = Signal(10)
-        sampled_r = Signal(10)
+        sampled_b = Signal(20)
+        sampled_g = Signal(20)
+        sampled_r = Signal(20)
 
-        sampled_b_r = Signal(10)
-        sampled_g_r = Signal(10)
-        sampled_r_r = Signal(10)
+        sampled_b_r = Signal(20)
+        sampled_g_r = Signal(20)
+        sampled_r_r = Signal(20)
 
-        sampled_b_r_r = Signal(10)
-        sampled_g_r_r = Signal(10)
-        sampled_r_r_r = Signal(10)
+        sampled_b_r_r = Signal(20)
+        sampled_g_r_r = Signal(20)
+        sampled_r_r_r = Signal(20)
 
         sampled_b_r_r_r = Signal(10)
         sampled_g_r_r_r = Signal(10)
@@ -51,11 +51,83 @@ class DVIDOverlay(Elaboratable):
             sampled_b_r_r.eq(sampled_b_r),
             sampled_g_r_r.eq(sampled_g_r),
             sampled_r_r_r.eq(sampled_r_r),
-
-            sampled_b_r_r_r.eq(sampled_b_r_r),
-            sampled_g_r_r_r.eq(sampled_g_r_r),
-            sampled_r_r_r_r.eq(sampled_r_r_r),
         ]
+
+        bitslip_b = Signal(4, reset=3)
+        bitslip_g = Signal(4)
+        bitslip_r = Signal(4)
+
+        with m.Switch(bitslip_b):
+            with m.Case(0):
+                sampled_b_r_r_r.eq(sampled_b_r_r[0:10]),
+            with m.Case(1):
+                sampled_b_r_r_r.eq(sampled_b_r_r[1:11]),
+            with m.Case(2):
+                sampled_b_r_r_r.eq(sampled_b_r_r[2:12]),
+            with m.Case(3):
+                sampled_b_r_r_r.eq(sampled_b_r_r[3:13]),
+            with m.Case(4):
+                sampled_b_r_r_r.eq(sampled_b_r_r[4:14]),
+            with m.Case(5):
+                sampled_b_r_r_r.eq(sampled_b_r_r[5:15]),
+            with m.Case(6):
+                sampled_b_r_r_r.eq(sampled_b_r_r[6:16]),
+            with m.Case(7):
+                sampled_b_r_r_r.eq(sampled_b_r_r[7:17]),
+            with m.Case(8):
+                sampled_b_r_r_r.eq(sampled_b_r_r[8:18]),
+            with m.Case(9):
+                sampled_b_r_r_r.eq(sampled_b_r_r[9:19]),
+            with m.Case():
+                sampled_b_r_r_r.eq(sampled_b_r_r[0:10]),
+    
+        with m.Switch(bitslip_g):
+            with m.Case(0):
+                sampled_g_r_r_r.eq(sampled_g_r_r[0:10]),
+            with m.Case(1):
+                sampled_g_r_r_r.eq(sampled_g_r_r[1:11]),
+            with m.Case(2):
+                sampled_g_r_r_r.eq(sampled_g_r_r[2:12]),
+            with m.Case(3):
+                sampled_g_r_r_r.eq(sampled_g_r_r[3:13]),
+            with m.Case(4):
+                sampled_g_r_r_r.eq(sampled_g_r_r[4:14]),
+            with m.Case(5):
+                sampled_g_r_r_r.eq(sampled_g_r_r[5:15]),
+            with m.Case(6):
+                sampled_g_r_r_r.eq(sampled_g_r_r[6:16]),
+            with m.Case(7):
+                sampled_g_r_r_r.eq(sampled_g_r_r[7:17]),
+            with m.Case(8):
+                sampled_g_r_r_r.eq(sampled_g_r_r[8:18]),
+            with m.Case(9):
+                sampled_g_r_r_r.eq(sampled_g_r_r[9:19]),
+            with m.Case():
+                sampled_g_r_r_r.eq(sampled_g_r_r[0:10]),
+    
+        with m.Switch(bitslip_r):
+            with m.Case(0):
+                sampled_r_r_r_r.eq(sampled_r_r_r[0:10]),
+            with m.Case(1):
+                sampled_r_r_r_r.eq(sampled_r_r_r[1:11]),
+            with m.Case(2):
+                sampled_r_r_r_r.eq(sampled_r_r_r[2:12]),
+            with m.Case(3):
+                sampled_r_r_r_r.eq(sampled_r_r_r[3:13]),
+            with m.Case(4):
+                sampled_r_r_r_r.eq(sampled_r_r_r[4:14]),
+            with m.Case(5):
+                sampled_r_r_r_r.eq(sampled_r_r_r[5:15]),
+            with m.Case(6):
+                sampled_r_r_r_r.eq(sampled_r_r_r[6:16]),
+            with m.Case(7):
+                sampled_r_r_r_r.eq(sampled_r_r_r[7:17]),
+            with m.Case(8):
+                sampled_r_r_r_r.eq(sampled_r_r_r[8:18]),
+            with m.Case(9):
+                sampled_r_r_r_r.eq(sampled_r_r_r[9:19]),
+            with m.Case():
+                sampled_r_r_r_r.eq(sampled_r_r_r[0:10]),
 
         shift_clock_initial = 0b0000011111
         C_shift_clock_initial = Const(shift_clock_initial)
@@ -154,11 +226,11 @@ class DVIDOverlay(Elaboratable):
 
         # Output the re-encoded signal
         # m.d.comb += dvid_out.eq(Cat(~dvid_in[0], ~dvid_in[1], dvid_in[2]))
-        # m.d.comb += dvid_out.eq(Cat(shift_blue[0], ~shift_green[0], ~shift_red[0]))
+        m.d.comb += dvid_out.eq(Cat(shift_blue[0], ~shift_green[0], ~shift_red[0]))
 
         # Just to test input sampling:
         # Output sampled data from shift domain directly (not using decoded, encoded data)
-        m.d.comb += dvid_out.eq(Cat(sampled_b[0], sampled_g[0], sampled_r[0]))
+        # m.d.comb += dvid_out.eq(Cat(sampled_b[0], sampled_g[0], sampled_r[0]))
 
 
 
@@ -188,10 +260,10 @@ class DVIDOverlayTest(FHDLTestCase):
         re_encoded = Signal(3)
         re_encoded_clk = Signal()
 
-        ctr = Signal(16)
+        ctr = Signal(16, reset=9)
         with m.If(ctr == 0):
             m.d.shift += encoded_shift.eq(encoded)
-            m.d.shift += ctr.eq(10)
+            m.d.shift += ctr.eq(9)
         with m.Else():
             m.d.shift += ctr.eq(ctr - 1)
             m.d.shift += encoded_shift.eq(Cat(encoded_shift[1:], 0))
@@ -199,12 +271,14 @@ class DVIDOverlayTest(FHDLTestCase):
         m.submodules.overlay = DVIDOverlay(Cat(encoded_shift[0], 0, 0), re_encoded, re_encoded_clk)
 
         sim = Simulator(m)
-        sim.add_clock(1/25e6,  domain="sync", phase=0)
-        sim.add_clock(1/250e6, domain="shift", phase=0)
+        sim.add_clock(1/25e6,  domain="sync")
+        sim.add_clock(1/250e6, domain="shift")
 
         def process():
             for i in range(0x20 * 10):
                 yield data.eq(i // 10)
+                yield c.eq(11)
+                yield blank.eq((i // 10) % 5 == 0)
                 yield
 
         sim.add_sync_process(process)
