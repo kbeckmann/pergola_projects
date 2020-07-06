@@ -38,9 +38,9 @@ class DVIDOverlay(Elaboratable):
         sampled_r_r_r_r = Signal(10)
 
         m.d.shift += [
-            sampled_b.eq(Cat(~dvid_in[0], sampled_b[:-1])),
-            sampled_g.eq(Cat( dvid_in[1], sampled_g[:-1])),
-            sampled_r.eq(Cat(~dvid_in[2], sampled_r[:-1])),
+            sampled_b.eq(Cat(dvid_in[0], sampled_b[:-1])),
+            sampled_g.eq(Cat(dvid_in[1], sampled_g[:-1])),
+            sampled_r.eq(Cat(dvid_in[2], sampled_r[:-1])),
 
             sampled_b_r.eq(sampled_b),
             sampled_g_r.eq(sampled_g),
@@ -154,11 +154,11 @@ class DVIDOverlay(Elaboratable):
 
         # Output the re-encoded signal
         # m.d.comb += dvid_out.eq(Cat(~dvid_in[0], ~dvid_in[1], dvid_in[2]))
-        m.d.comb += dvid_out.eq(Cat(shift_blue[0], ~shift_green[0], ~shift_red[0]))
+        # m.d.comb += dvid_out.eq(Cat(shift_blue[0], ~shift_green[0], ~shift_red[0]))
 
         # Just to test input sampling:
         # Output sampled data from shift domain directly (not using decoded, encoded data)
-        # m.d.comb += dvid_out.eq(Cat(sampled_b[0], ~sampled_g[0], ~sampled_r[0]))
+        m.d.comb += dvid_out.eq(Cat(sampled_b[0], sampled_g[0], sampled_r[0]))
 
 
 
@@ -199,8 +199,8 @@ class DVIDOverlayTest(FHDLTestCase):
         m.submodules.overlay = DVIDOverlay(Cat(encoded_shift[0], 0, 0), re_encoded, re_encoded_clk)
 
         sim = Simulator(m)
-        sim.add_clock(1/25e6,  domain="sync")
-        sim.add_clock(1/250e6, domain="shift")
+        sim.add_clock(1/25e6,  domain="sync", phase=0)
+        sim.add_clock(1/250e6, domain="shift", phase=0)
 
         def process():
             for i in range(0x20 * 10):
@@ -266,6 +266,12 @@ class DVIDOverlayApplet(Applet, applet_name="dvid-overlay"):
         ], clock_signal_name="pmod1_lvds_clk")
 
 
-        m.submodules += DVIDOverlay(dvid_in, dvid_out, dvid_clk_out)
+        dvid_in_tmp = Signal(3)
+        dvid_out_tmp = Signal(3)
+        m.d.comb += [
+            dvid_in_tmp.eq(Cat(~dvid_in[0], dvid_in[1], ~dvid_in[2])),
+            dvid_out.eq(Cat(dvid_out_tmp[0], ~dvid_out_tmp[1], ~dvid_out_tmp[2])),
+        ]
+        m.submodules += DVIDOverlay(dvid_in_tmp, dvid_out_tmp, dvid_clk_out)
 
         return m
