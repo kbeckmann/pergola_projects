@@ -212,14 +212,14 @@ class DVIDSignalGeneratorXDR(Elaboratable):
         elif xdr == 4:
             m.d.comb += [
                 self.dvid_out_clk.o_clk.eq(ClockSignal("shift")),
-                self.dvid_out_clk.o_eclk.eq(ClockSignal("shift_x2")),
+                self.dvid_out_clk.o_fclk.eq(ClockSignal("shift_x2")),
                 self.dvid_out_clk.o0.eq(pixel_clk_r[0]),
                 self.dvid_out_clk.o1.eq(pixel_clk_r[1]),
                 self.dvid_out_clk.o2.eq(pixel_clk_r[2]),
                 self.dvid_out_clk.o3.eq(pixel_clk_r[3]),
 
                 self.dvid_out.o_clk.eq(ClockSignal("shift")),
-                self.dvid_out.o_eclk.eq(ClockSignal("shift_x2")),
+                self.dvid_out.o_fclk.eq(ClockSignal("shift_x2")),
                 self.dvid_out.o0.eq(Cat(pixel_b_r[0], pixel_g_r[0], pixel_r_r[0])),
                 self.dvid_out.o1.eq(Cat(pixel_b_r[1], pixel_g_r[1], pixel_r_r[1])),
                 self.dvid_out.o2.eq(Cat(pixel_b_r[2], pixel_g_r[2], pixel_r_r[2])),
@@ -228,7 +228,7 @@ class DVIDSignalGeneratorXDR(Elaboratable):
         elif xdr == 7:
             m.d.comb += [
                 self.dvid_out_clk.o_clk.eq(ClockSignal("shift")),
-                self.dvid_out_clk.o_eclk.eq(ClockSignal("shift_x2")),
+                self.dvid_out_clk.o_fclk.eq(ClockSignal("shift_x2")),
                 self.dvid_out_clk.o0.eq(pixel_clk_r[0]),
                 self.dvid_out_clk.o1.eq(pixel_clk_r[1]),
                 self.dvid_out_clk.o2.eq(pixel_clk_r[2]),
@@ -238,7 +238,7 @@ class DVIDSignalGeneratorXDR(Elaboratable):
                 self.dvid_out_clk.o6.eq(pixel_clk_r[6]),
 
                 self.dvid_out.o_clk.eq(ClockSignal("shift")),
-                self.dvid_out.o_eclk.eq(ClockSignal("shift_x2")),
+                self.dvid_out.o_fclk.eq(ClockSignal("shift_x2")),
                 self.dvid_out.o0.eq(Cat(pixel_b_r[0], pixel_g_r[0], pixel_r_r[0])),
                 self.dvid_out.o1.eq(Cat(pixel_b_r[1], pixel_g_r[1], pixel_r_r[1])),
                 self.dvid_out.o2.eq(Cat(pixel_b_r[2], pixel_g_r[2], pixel_r_r[2])),

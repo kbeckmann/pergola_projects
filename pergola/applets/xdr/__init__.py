@@ -33,7 +33,7 @@ class DDRExampleApplet(Applet, applet_name="xdr"):
         m.d.comb += led.o0.eq(0b1)
         m.d.comb += led.o1.eq(0b0)
         if xdr > 2:
-            m.d.comb += led.o_eclk.eq(timer[-2])
+            m.d.comb += led.o_fclk.eq(timer[-2])
             m.d.comb += led.o2.eq(0b1)
             m.d.comb += led.o3.eq(0b0)
         if xdr == 7:
