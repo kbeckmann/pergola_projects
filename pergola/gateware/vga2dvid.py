@@ -63,11 +63,12 @@ class VGA2DVID(Elaboratable):
     out_b:     TMDS encoded output in shift clock domain
     out_clock: Clock output in shift clock domain
 
-    xdr:       Data rate. SDR=1, DDR=2, QDR=4
+    xdr:       Data rate. SDR=1, DDR=2, QDR=4, 7DR=7
 
     Clock domains
     sync:      Pixel clock
-    shift:     TMDS output shift clock, multiplier of pixel clock: SDR=10x, DDR=5x, QDR=2.5x
+    shift:     TMDS output shift clock, multiplier of pixel clock:
+               SDR=10x, DDR=5x, QDR=2.5x, 7DR=10/7x
     """
 
 
