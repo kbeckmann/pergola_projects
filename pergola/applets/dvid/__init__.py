@@ -635,6 +635,7 @@ end
 #include <iostream>
 #include <fstream>
 #include <SDL2/SDL.h>
+#include <backends/cxxrtl/cxxrtl_vcd.h>
 
 struct sdl_vga_phy : public cxxrtl_design::bb_p_vga__phy {
     SDL_Window *window = nullptr;
@@ -714,18 +715,29 @@ bb_p_vga__phy::create(std::string name,
 
 }
 
-int main()
+int main(int argc, char *argv[])
 {
     cxxrtl_design::p_top top;
     sdl_vga_phy *vga_phy = static_cast<sdl_vga_phy*>(top.cell_p_vga__phy.get());
 
+    vcd_writer w;
+
+    if (argc == 2) {
+        debug_items items;
+        top.debug_info(items);
+        w.add(items);
+    }
+
     unsigned lastTime = 0;
+    unsigned globalTime = 0;
     while (1) {
         for (unsigned steps = 0; steps < 100000; steps++) {
             top.p_clk.set<uint32_t>(0);
             top.step();
             top.p_clk.set<uint32_t>(1);
             top.step();
+            if (argc == 2)
+                w.sample(globalTime++);
         }
 
         unsigned currentTime = SDL_GetTicks();
@@ -741,6 +753,13 @@ int main()
             if (event.type == SDL_KEYDOWN)
                 break;
         }
+    }
+
+    if (argc == 2) {
+        std::cout << "Writing " << argv[1] << std::endl;
+        std::ofstream outfile (argv[1]);
+        outfile << w.buffer;
+        outfile.close();
     }
 
     SDL_Quit();
