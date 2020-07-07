@@ -69,8 +69,6 @@ class VGA2DVID(Elaboratable):
     sync:      Pixel clock
     shift:     TMDS output shift clock, multiplier of pixel clock: SDR=10x, DDR=5x, QDR=2.5x
     shift_x2:  Only needed in QDR. 5x pixel clock
-
-    TODO: Add QDR support
     """
 
 
