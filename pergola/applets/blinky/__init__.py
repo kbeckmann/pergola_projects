@@ -79,6 +79,9 @@ class BlinkySim(FHDLTestCase):
         output = cxxrtl.convert(m, ports=(led, btn, m.submodules.blinky.timer))
 
         root = os.path.join("build")
+        if not os.path.exists(root):
+            os.mkdir("build")
+
         filename = os.path.join(root, "top.cpp")
         elfname = os.path.join(root, "top.elf")
 
@@ -87,12 +90,25 @@ class BlinkySim(FHDLTestCase):
             f.write('''
 
 #include <iostream>
+#include <fstream>
+#include <backends/cxxrtl/cxxrtl_vcd.h>
 
-int main()
+int main(int argc, char *argv[])
 {
     cxxrtl_design::p_top top;
 
-    std::cout << "timer" << "\t" << "btn" << "\t" << "led" << std::endl;
+    vcd_writer w;
+
+    if (argc != 2) {
+        std::cout << "Usage: " << argv[0] << " out.vcd" << std::endl;
+        return 1;
+    }
+
+    debug_items items;
+    top.debug_info(items);
+    w.add(items);
+
+    std::cout << "timer" << "	" << "btn" << "	" << "led" << std::endl;
     for (int i=0; i < 16; i++) {
 
         if (i >= 8) {
@@ -104,20 +120,26 @@ int main()
         top.step();
         top.p_clk = value<1>{1u};
 
-        std::cout << top.p_timer << "\t" << top.p_btn << "\t" << top.p_led << std::endl;
+        std::cout << top.p_timer << "	" << top.p_btn << "	" << top.p_led << std::endl;
+        w.sample(i);
     }
 
-    return 0;
-}
+    std::cout << "Writing " << argv[1] << std::endl;
+    std::ofstream outfile (argv[1]);
 
-            ''')
+    outfile << w.buffer;
+
+    outfile.close();
+
+    return 0;
+}''')
             f.close()
 
         print(subprocess.check_call([
             "clang++", "-I", "/usr/share/yosys/include",
             "-O3", "-std=c++11", "-o", elfname, filename]))
 
-        print(subprocess.check_call([elfname]))
+        print(subprocess.check_call([elfname, "build/top.vcd"]))
 
 
 class BlinkyApplet(Applet, applet_name="blinky"):
