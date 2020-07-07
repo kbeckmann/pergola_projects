@@ -103,21 +103,21 @@ class DVIDSignalGeneratorXDR(Elaboratable):
         elif xdr == 4:
             if True:
                 pll_config = [
-                    ECP5PLLConfig("shift_x2", self.pixel_freq_mhz * 10 / 2),
+                    ECP5PLLConfig("shift_fast", self.pixel_freq_mhz * 10 / 2),
                     ECP5PLLConfig("shift", self.pixel_freq_mhz * 10 / 2 / 2),
                     ECP5PLLConfig("sync", self.pixel_freq_mhz),
                 ]
             else:
-                # Generate sclk(shift) from eclk(shift_x2)
-                # This unfortunately reduces timing of the shift_x2 from 400 to 350 MHz or so
+                # Generate sclk(shift) from fclk(shift_fast)
+                # This unfortunately reduces timing of the shift_fast from 400 to 350 MHz or so
                 pll_config = [
-                    ECP5PLLConfig("shift_x2", self.pixel_freq_mhz * 10 / 2),
+                    ECP5PLLConfig("shift_fast", self.pixel_freq_mhz * 10 / 2),
                     ECP5PLLConfig("sync", self.pixel_freq_mhz),
                 ]
                 shift_clk = Signal()
                 m.domains += ClockDomain("shift")
                 m.submodules.clkdiv2 = Instance("CLKDIVF",
-                    i_CLKI=ClockSignal("shift_x2"),
+                    i_CLKI=ClockSignal("shift_fast"),
                     i_RST=0,
                     i_ALIGNWD=0,
 
@@ -128,7 +128,7 @@ class DVIDSignalGeneratorXDR(Elaboratable):
         elif xdr == 7:
             if True:
                 pll_config = [
-                    ECP5PLLConfig("shift_x2", self.pixel_freq_mhz * 10 / 2),
+                    ECP5PLLConfig("shift_fast", self.pixel_freq_mhz * 10 / 2),
                     ECP5PLLConfig("shift", self.pixel_freq_mhz * 10 / 2. / 3.5),
                     ECP5PLLConfig("sync", self.pixel_freq_mhz),
                 ]
@@ -212,14 +212,14 @@ class DVIDSignalGeneratorXDR(Elaboratable):
         elif xdr == 4:
             m.d.comb += [
                 self.dvid_out_clk.o_clk.eq(ClockSignal("shift")),
-                self.dvid_out_clk.o_fclk.eq(ClockSignal("shift_x2")),
+                self.dvid_out_clk.o_fclk.eq(ClockSignal("shift_fast")),
                 self.dvid_out_clk.o0.eq(pixel_clk_r[0]),
                 self.dvid_out_clk.o1.eq(pixel_clk_r[1]),
                 self.dvid_out_clk.o2.eq(pixel_clk_r[2]),
                 self.dvid_out_clk.o3.eq(pixel_clk_r[3]),
 
                 self.dvid_out.o_clk.eq(ClockSignal("shift")),
-                self.dvid_out.o_fclk.eq(ClockSignal("shift_x2")),
+                self.dvid_out.o_fclk.eq(ClockSignal("shift_fast")),
                 self.dvid_out.o0.eq(Cat(pixel_b_r[0], pixel_g_r[0], pixel_r_r[0])),
                 self.dvid_out.o1.eq(Cat(pixel_b_r[1], pixel_g_r[1], pixel_r_r[1])),
                 self.dvid_out.o2.eq(Cat(pixel_b_r[2], pixel_g_r[2], pixel_r_r[2])),
@@ -228,7 +228,7 @@ class DVIDSignalGeneratorXDR(Elaboratable):
         elif xdr == 7:
             m.d.comb += [
                 self.dvid_out_clk.o_clk.eq(ClockSignal("shift")),
-                self.dvid_out_clk.o_fclk.eq(ClockSignal("shift_x2")),
+                self.dvid_out_clk.o_fclk.eq(ClockSignal("shift_fast")),
                 self.dvid_out_clk.o0.eq(pixel_clk_r[0]),
                 self.dvid_out_clk.o1.eq(pixel_clk_r[1]),
                 self.dvid_out_clk.o2.eq(pixel_clk_r[2]),
@@ -238,7 +238,7 @@ class DVIDSignalGeneratorXDR(Elaboratable):
                 self.dvid_out_clk.o6.eq(pixel_clk_r[6]),
 
                 self.dvid_out.o_clk.eq(ClockSignal("shift")),
-                self.dvid_out.o_fclk.eq(ClockSignal("shift_x2")),
+                self.dvid_out.o_fclk.eq(ClockSignal("shift_fast")),
                 self.dvid_out.o0.eq(Cat(pixel_b_r[0], pixel_g_r[0], pixel_r_r[0])),
                 self.dvid_out.o1.eq(Cat(pixel_b_r[1], pixel_g_r[1], pixel_r_r[1])),
                 self.dvid_out.o2.eq(Cat(pixel_b_r[2], pixel_g_r[2], pixel_r_r[2])),
