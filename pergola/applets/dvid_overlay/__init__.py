@@ -9,6 +9,8 @@ from ...util.test import FHDLTestCase
 from ...gateware.tmds import TMDSEncoder, TMDSDecoder
 from ...gateware.dvid2vga import DVID2VGA
 from ...gateware.vga2dvid import VGA2DVID
+from ...gateware.vga import *
+from ...gateware.vga_testimage import *
 
 class DVIDOverlay(Elaboratable):
     def __init__(self, dvid_in, dvid_out, dvid_clk_out, debug):
@@ -75,13 +77,69 @@ class DVIDOverlay(Elaboratable):
 
         m.d.comb += dvid_out.eq(Cat(tmds_d0, tmds_d1, tmds_d2))
 
+        vga_output = Record([
+            ('hs', 1),
+            ('vs', 1),
+            ('blank', 1),
+        ])
+
+
+        vga_configs = {
+            "640x480p60": VGAParameters(
+                    h_front=0,
+                    h_sync=96,
+                    h_back=48+16,
+                    h_active=640,
+                    v_front=10,
+                    v_sync=2,
+                    v_back=33,
+                    v_active=480,
+                ),
+        }
+
+        m.submodules.vga = VGAOutputSubtarget(
+            output=vga_output,
+            vga_parameters=vga_configs["640x480p60"],
+        )
+
+        # Generate vga test image
+        secondary_r = Signal(8)
+        secondary_g = Signal(8)
+        secondary_b = Signal(8)
+        m.submodules.imagegen = TestImageGenerator(
+            vsync=vga_output.vs,
+            h_ctr=m.submodules.vga.h_ctr,
+            v_ctr=m.submodules.vga.v_ctr,
+            r=secondary_r,
+            g=secondary_g,
+            b=secondary_b,
+            speed=0)
+
+        overlay_r = Signal(8)
+        overlay_g = Signal(8)
+        overlay_b = Signal(8)
+        m.d.comb += [
+            overlay_r.eq((decoded_r >> 1) + (secondary_r >> 1)),
+            overlay_g.eq((decoded_g >> 1) + (secondary_g >> 1)),
+            overlay_b.eq((decoded_b >> 1) + (secondary_b >> 1)),
+        ]
+
+
         m.submodules.vga2dvid = vga2dvid = VGA2DVID(
-            in_r=decoded_r,
-            in_g=decoded_g,
-            in_b=decoded_b,
-            in_blank=~decoded_de0,
-            in_hsync=decoded_hsync,
-            in_vsync=decoded_vsync,
+            # in_r=Const(127, 8),
+            # in_g=Const(63, 8),
+            # in_b=Const(42, 8),
+            in_r=overlay_r,
+            in_g=overlay_g,
+            in_b=overlay_b,
+            # in_blank=decoded_de0,
+            # in_hsync=decoded_hsync,
+            # in_vsync=decoded_vsync,
+            in_blank = vga_output.blank,
+            in_hsync = vga_output.hs,
+            in_vsync = vga_output.vs,
+            in_c1=Cat(decoded_ctl0, decoded_ctl1),
+            in_c2=Cat(decoded_ctl2, decoded_ctl3),
 
             out_r=tmds_d2,
             out_g=tmds_d1,
