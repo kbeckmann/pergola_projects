@@ -68,6 +68,7 @@ class DVID2VGA(Elaboratable):
 
         self.d0_full = Signal(20)
         self.d0_offset = Signal(4)
+        self.d0_offset_ctr = Signal(12, reset=2**12-1)
         self.d0 = Signal(10)
         self.d0_r = Signal(10)
 
@@ -80,28 +81,20 @@ class DVID2VGA(Elaboratable):
 
         d0_full = self.d0_full
         d0_offset = self.d0_offset
+        d0_offset_ctr = self.d0_offset_ctr
         d0 = self.d0
         d0_r = self.d0_r
 
 
         d1_full = Signal(20)
-        d1_offset = Signal(4)
+        # d1_offset = Signal(4)
         d1 = Signal(10)
         d1_r = Signal(10)
 
         d2_full = Signal(20)
-        d2_offset = Signal(4)
+        # d2_offset = Signal(4)
         d2 = Signal(10)
         d2_r = Signal(10)
-
-        m.d.comb += d0_offset.eq(1)
-        m.d.comb += d1_offset.eq(1)
-        m.d.comb += d2_offset.eq(1)
-
-        # FIXME: Shift order?
-        # m.d.shift += d0_full.eq(Cat(in_d0, d0_full[:-1]))
-        # m.d.shift += d1_full.eq(Cat(in_d1, d1_full[:-1]))
-        # m.d.shift += d2_full.eq(Cat(in_d2, d2_full[:-1]))
 
         m.d.shift += d0_full.eq(Cat(d0_full[1:], in_d0))
         m.d.shift += d1_full.eq(Cat(d1_full[1:], in_d1))
@@ -109,8 +102,8 @@ class DVID2VGA(Elaboratable):
 
         for (sig, sig_full, sig_offset) in [
             (d0, d0_full, d0_offset),
-            (d1, d1_full, d1_offset),
-            (d2, d2_full, d2_offset)]:
+            (d1, d1_full, d0_offset),   # TODO: Individual phase alignment
+            (d2, d2_full, d0_offset)]:  # TODO: Individual phase alignment
             with m.Switch(sig_offset):
                 for i in range(10):
                     with m.Case(i):
@@ -126,6 +119,22 @@ class DVID2VGA(Elaboratable):
         m.submodules.tmds_dec_d0 = TMDSDecoder(d0_r, self.out_b, Cat(self.out_hsync, self.out_vsync), self.out_de0)
         m.submodules.tmds_dec_d1 = TMDSDecoder(d1_r, self.out_g, Cat(self.out_ctl0,  self.out_ctl1),  self.out_de1)
         m.submodules.tmds_dec_d2 = TMDSDecoder(d2_r, self.out_r, Cat(self.out_ctl2,  self.out_ctl3),  self.out_de2)
+
+
+        de0_r = Signal()
+        m.d.sync += de0_r.eq(self.out_de0)
+        with m.If(self.out_de0):
+            m.d.sync += d0_offset_ctr.eq(d0_offset_ctr - 1)
+        with m.Elif(~de0_r & ~self.out_de0):
+            m.d.sync += d0_offset_ctr.eq(2**12 - 1)
+
+        with m.If(d0_offset_ctr == 0):
+            # No sync found in 4095 cycles. Slip one bit.
+            m.d.sync += d0_offset_ctr.eq(2**12 - 1)
+            with m.If(d0_offset == 9):
+                m.d.sync += d0_offset.eq(0)
+            with m.Else():
+                m.d.sync += d0_offset.eq(d0_offset + 1)
 
         return m
 
@@ -286,6 +295,7 @@ class DVID2VGATest(FHDLTestCase):
                                     decoded_vsync,
                                     dvid2vga.d0_full,
                                     dvid2vga.d0_offset,
+                                    dvid2vga.d0_offset_ctr,
                                     dvid2vga.d0,
                                     dvid2vga.d0_r
                                 ),
@@ -450,7 +460,7 @@ int main(int argc, char *argv[])
                 w.sample(globalTime++);
         }
 
-        // break; // TODO: Remove
+        //break; // TODO: Remove
 
         unsigned currentTime = SDL_GetTicks();
         float delta = currentTime - lastTime;
