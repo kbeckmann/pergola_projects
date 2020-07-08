@@ -98,6 +98,8 @@ class VGAOutputSubtarget(Elaboratable):
         self.g = g
         self.b = b
 
+        self.reset = Signal()
+
     def elaborate(self, platform):
         m = Module()
         m.submodules.output = output = VGAOutput(self.output)
@@ -141,5 +143,10 @@ class VGAOutputSubtarget(Elaboratable):
                 m.d.sync += output.r.eq(0),
                 m.d.sync += output.g.eq(0),
                 m.d.sync += output.b.eq(0),
+
+        with m.If(self.reset):
+            m.d.sync += self.reset.eq(0)
+            m.d.sync += self.h_ctr.eq(0)
+            m.d.sync += self.v_ctr.eq(0)
 
         return m

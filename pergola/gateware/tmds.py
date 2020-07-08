@@ -120,13 +120,13 @@ class TMDSEncoder(Elaboratable):
 
         with m.If(self.blank):
             with m.Switch(self.c):
-                with m.Case(0b00):
+                with m.Case(0b11):
                     m.d.sync += self.encoded.eq(0b1101010100)
                 with m.Case(0b01):
                     m.d.sync += self.encoded.eq(0b0010101011)
                 with m.Case(0b10):
                     m.d.sync += self.encoded.eq(0b0101010100)
-                with m.Case(0b11):
+                with m.Case(0b0):
                     m.d.sync += self.encoded.eq(0b1010101011)
             m.d.sync += disparity.eq(0)
 
@@ -210,7 +210,7 @@ class TMDSDecoder(Elaboratable):
 
         with m.Switch(data_in):
             with m.Case(0b1101010100):
-                m.d.sync += c.eq(0b00)
+                m.d.sync += c.eq(0b11)
                 m.d.sync += active_data.eq(0)
             with m.Case(0b0010101011):
                 m.d.sync += c.eq(0b01)
@@ -219,7 +219,7 @@ class TMDSDecoder(Elaboratable):
                 m.d.sync += c.eq(0b10)
                 m.d.sync += active_data.eq(0)
             with m.Case(0b1010101011):
-                m.d.sync += c.eq(0b11)
+                m.d.sync += c.eq(0b00)
                 m.d.sync += active_data.eq(0)
             with m.Default():
                 m.d.sync += c.eq(0b00)
