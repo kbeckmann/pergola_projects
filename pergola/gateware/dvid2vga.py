@@ -120,17 +120,10 @@ class DVID2VGA(Elaboratable):
                 with m.Case():
                     m.d.comb += sig.eq(sig_full[0:10])
 
-        d0_r_r = Signal(10)
-        d1_r_r = Signal(10)
-        d2_r_r = Signal(10)
-        m.submodules += FFSynchronizer(d0, d0_r, o_domain="shift")
-        m.submodules += FFSynchronizer(d1, d1_r, o_domain="shift")
-        m.submodules += FFSynchronizer(d2, d2_r, o_domain="shift")
-
         # shift -> sync (10x !)
-        m.submodules += FFSynchronizer(d0_r, d0_r_r)
-        m.submodules += FFSynchronizer(d1_r, d1_r_r)
-        m.submodules += FFSynchronizer(d2_r, d2_r_r)
+        m.submodules += FFSynchronizer(d0, d0_r)
+        m.submodules += FFSynchronizer(d1, d1_r)
+        m.submodules += FFSynchronizer(d2, d2_r)
 
 
         # TODO: Handle data island
@@ -145,12 +138,12 @@ class DVID2VGA(Elaboratable):
         # with m.If((self.out_de1 & self.out_de2) & self.out_ctl0 & ~self.out_ctl1 & self.out_ctl2 & ~self.out_ctl3):
         #     m.d.sync += data_island.eq(1)
 
-        # with m.If(data_island & (d1_r_r == 0b0100110011) & (d2_r_r == 0b0100110011)):
+        # with m.If(data_island & (d1_r == 0b0100110011) & (d2_r == 0b0100110011)):
         #     m.d.sync += data_island.eq(0)
 
-        m.submodules.tmds_dec_d0 = TMDSDecoder(d0_r_r, self.out_b, c0, de0)
-        m.submodules.tmds_dec_d1 = TMDSDecoder(d1_r_r, self.out_g, Cat(self.out_ctl0,  self.out_ctl1),  self.out_de1)
-        m.submodules.tmds_dec_d2 = TMDSDecoder(d2_r_r, self.out_r, Cat(self.out_ctl2,  self.out_ctl3),  self.out_de2)
+        m.submodules.tmds_dec_d0 = TMDSDecoder(d0_r, self.out_b, c0, de0)
+        m.submodules.tmds_dec_d1 = TMDSDecoder(d1_r, self.out_g, Cat(self.out_ctl0,  self.out_ctl1),  self.out_de1)
+        m.submodules.tmds_dec_d2 = TMDSDecoder(d2_r, self.out_r, Cat(self.out_ctl2,  self.out_ctl3),  self.out_de2)
 
         # Recover the signal by searching for two (pixel-)clock cycles
         # of ~de0 (any sync word on d0)
