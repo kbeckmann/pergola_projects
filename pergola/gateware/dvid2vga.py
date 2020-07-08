@@ -73,12 +73,16 @@ class DVID2VGA(Elaboratable):
         self.d0 = Signal(10)
         self.d0_r = Signal(10)
 
+        self.data_island = Signal()
+
     def elaborate(self, platform):
         in_d0 = self.in_d0
         in_d1 = self.in_d1
         in_d2 = self.in_d2
 
         xdr = self.xdr
+
+        data_island = self.data_island
 
         m = Module()
 
@@ -128,7 +132,23 @@ class DVID2VGA(Elaboratable):
         m.submodules += FFSynchronizer(d1_r, d1_r_r)
         m.submodules += FFSynchronizer(d2_r, d2_r_r)
 
-        m.submodules.tmds_dec_d0 = TMDSDecoder(d0_r_r, self.out_b, Cat(self.out_hsync, self.out_vsync), self.out_de0)
+
+        # TODO: Handle data island
+        c0 = Signal(2)
+        de0 = Signal()
+        m.d.comb += [
+            self.out_hsync.eq(Mux(data_island, 0, c0[0])),
+            self.out_vsync.eq(Mux(data_island, 0, c0[1])),
+            self.out_de0.eq(Mux(data_island, 0, de0)),
+        ]
+
+        # with m.If((self.out_de1 & self.out_de2) & self.out_ctl0 & ~self.out_ctl1 & self.out_ctl2 & ~self.out_ctl3):
+        #     m.d.sync += data_island.eq(1)
+
+        # with m.If(data_island & (d1_r_r == 0b0100110011) & (d2_r_r == 0b0100110011)):
+        #     m.d.sync += data_island.eq(0)
+
+        m.submodules.tmds_dec_d0 = TMDSDecoder(d0_r_r, self.out_b, c0, de0)
         m.submodules.tmds_dec_d1 = TMDSDecoder(d1_r_r, self.out_g, Cat(self.out_ctl0,  self.out_ctl1),  self.out_de1)
         m.submodules.tmds_dec_d2 = TMDSDecoder(d2_r_r, self.out_r, Cat(self.out_ctl2,  self.out_ctl3),  self.out_de2)
 
