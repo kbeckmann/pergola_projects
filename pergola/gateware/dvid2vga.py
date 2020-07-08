@@ -1,5 +1,5 @@
 from nmigen import *
-from .tmds import TMDSEncoder
+from .tmds import TMDSEncoder, TMDSDecoder
 from ..util.test import FHDLTestCase
 
 
@@ -67,7 +67,63 @@ class DVID2VGA(Elaboratable):
         self.xdr = xdr
 
     def elaborate(self, platform):
+        in_d0 = self.in_d0
+        in_d1 = self.in_d1
+        in_d2 = self.in_d2
+
         m = Module()
+
+        d0_full = Signal(20)
+        d0_offset = Signal(4)
+        d0 = Signal(10)
+        d0_r = Signal(10)
+
+        d1_full = Signal(20)
+        d1_offset = Signal(4)
+        d1 = Signal(10)
+        d1_r = Signal(10)
+
+        d2_full = Signal(20)
+        d2_offset = Signal(4)
+        d2 = Signal(10)
+        d2_r = Signal(10)
+
+        m.d.comb += d0_offset.eq(1)
+        m.d.comb += d1_offset.eq(1)
+        m.d.comb += d2_offset.eq(1)
+
+        for (sig, sig_full, sig_offset) in [
+            (d0, d0_full, d0_offset),
+            (d1, d1_full, d1_offset),
+            (d2, d2_full, d2_offset)]:
+            with m.Switch(sig_offset):
+                for i in range(10):
+                    with m.Case(i):
+                        m.d.comb += sig.eq(sig_full[i:10+i])
+                with m.Case():
+                    m.d.comb += sig.eq(sig_full[0:10])
+
+        # FIXME: Shift order?
+        # m.d.shift += d0_full.eq(Cat(in_d0, d0_full[:-1]))
+        # m.d.shift += d1_full.eq(Cat(in_d1, d1_full[:-1]))
+        # m.d.shift += d2_full.eq(Cat(in_d2, d2_full[:-1]))
+
+        m.d.shift += d0_full.eq(Cat(d0_full[1:], in_d0))
+        m.d.shift += d1_full.eq(Cat(d1_full[1:], in_d1))
+        m.d.shift += d2_full.eq(Cat(d2_full[1:], in_d2))
+
+        m.d.sync += d0_r.eq(d0)
+        m.d.sync += d1_r.eq(d1)
+        m.d.sync += d2_r.eq(d2)
+
+        # FIXME: Why are these flipped?
+        c0 = Signal(2)
+        m.d.comb += self.out_hsync.eq(c0[1])
+        m.d.comb += self.out_vsync.eq(c0[0])
+
+        m.submodules.tmds_dec_d0 = TMDSDecoder(d0_r, self.out_b, c0, self.out_de0)
+        m.submodules.tmds_dec_d1 = TMDSDecoder(d1_r, self.out_g, Cat(self.out_ctl0, self.out_ctl1), self.out_de1)
+        m.submodules.tmds_dec_d2 = TMDSDecoder(d2_r, self.out_r, Cat(self.out_ctl2, self.out_ctl3), self.out_de2)
 
         return m
 
@@ -145,9 +201,9 @@ class DVID2VGATest(FHDLTestCase):
             in_blank = vga_output.blank,
             in_hsync = vga_output.hs,
             in_vsync = vga_output.vs,
-            out_r = tmds_d0,
+            out_r = tmds_d2,
             out_g = tmds_d1,
-            out_b = tmds_d2,
+            out_b = tmds_d0,
             out_clock = tmds_clk,
             xdr=xdr
         )
@@ -285,6 +341,7 @@ struct sdl_vga_phy : public cxxrtl_design::bb_p_vga__phy {
             SDL_RenderPresent(renderer);
             beamAt = 0;
             frames++;
+            std::cout << "Frame " << frames << std::endl;
         }
     }
     return true;
@@ -359,6 +416,8 @@ int main(int argc, char *argv[])
             if (argc == 2)
                 w.sample(globalTime++);
         }
+
+        // break; // TODO: Remove
 
         unsigned currentTime = SDL_GetTicks();
         float delta = currentTime - lastTime;
