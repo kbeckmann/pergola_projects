@@ -176,7 +176,6 @@ class TMDSDecoder(Elaboratable):
         c = self.c
         active_data = self.active_data
 
-        data_delayed = Signal(10)
         sometimes_inverted = Signal(9)
         next_c = Signal(2)
         next_active_data = Signal()
@@ -209,10 +208,10 @@ class TMDSDecoder(Elaboratable):
                 ~(sometimes_inverted[7] ^ sometimes_inverted[6]),
             ))
 
-        with m.If(data_delayed[9] == 1):
-            m.d.sync += sometimes_inverted.eq(Cat(~data_delayed[:8], data_delayed[8]))
+        with m.If(data_in[9] == 1):
+            m.d.comb += sometimes_inverted.eq(Cat(~data_in[:8], data_in[8]))
         with m.Else():
-            m.d.sync += sometimes_inverted.eq(data_delayed[:9])
+            m.d.comb += sometimes_inverted.eq(data_in[:9])
 
         with m.Switch(data_in):
             with m.Case(0b1101010100):
@@ -230,8 +229,6 @@ class TMDSDecoder(Elaboratable):
             with m.Default():
                 m.d.sync += next_c.eq(0b00)
                 m.d.sync += next_active_data.eq(1)
-
-        m.d.sync += data_delayed.eq(data_in)
 
         return m
 
