@@ -46,7 +46,7 @@ class DVIDOverlay(Elaboratable):
         decoded_de1 = Signal()
         decoded_ctl0 = Signal()
         decoded_ctl1 = Signal()
-        decoded_de1 = Signal()
+        decoded_de2 = Signal()
         decoded_ctl2 = Signal()
         decoded_ctl3 = Signal()
 
@@ -64,7 +64,7 @@ class DVIDOverlay(Elaboratable):
             out_de1=decoded_de1,
             out_ctl0=decoded_ctl0,
             out_ctl1=decoded_ctl1,
-            out_de2=decoded_de1,
+            out_de2=decoded_de2,
             out_ctl2=decoded_ctl2,
             out_ctl3=decoded_ctl3,
 
@@ -106,38 +106,68 @@ class DVIDOverlay(Elaboratable):
         secondary_r = Signal(8)
         secondary_g = Signal(8)
         secondary_b = Signal(8)
-        m.submodules.imagegen = TestImageGenerator(
+
+        # m.submodules.imagegen = TestImageGenerator(
+        m.submodules.imagegen = StaticTestImageGenerator(
             vsync=vga_output.vs,
             h_ctr=m.submodules.vga.h_ctr,
             v_ctr=m.submodules.vga.v_ctr,
             r=secondary_r,
             g=secondary_g,
             b=secondary_b,
-            speed=0)
+            # speed=0
+        )
 
         overlay_r = Signal(8)
         overlay_g = Signal(8)
         overlay_b = Signal(8)
         m.d.comb += [
-            overlay_r.eq((decoded_r >> 1) + (secondary_r >> 1)),
-            overlay_g.eq((decoded_g >> 1) + (secondary_g >> 1)),
-            overlay_b.eq((decoded_b >> 1) + (secondary_b >> 1)),
+            overlay_r.eq(decoded_r),
+            overlay_g.eq(decoded_g),
+            overlay_b.eq(decoded_b),
         ]
+
+        # m.d.comb += [
+        #     overlay_r.eq((decoded_r >> 1) + (secondary_r >> 1)),
+        #     overlay_g.eq((decoded_g >> 1) + (secondary_g >> 1)),
+        #     overlay_b.eq((decoded_b >> 1) + (secondary_b >> 1)),
+        # ]
+
+        # m.d.comb += [
+        #     overlay_r.eq(secondary_r),
+        #     overlay_g.eq(secondary_g),
+        #     overlay_b.eq(secondary_b),
+        # ]
+
+        # m.d.comb += [
+        #     overlay_r.eq((decoded_r >> 1) + Mux(decoded_de0, 127, 0)),
+        #     overlay_g.eq((decoded_g >> 1) + Mux(decoded_hsync, 127, 0)),
+        #     overlay_b.eq((decoded_b >> 1) + Mux(decoded_vsync, 127, 0)),
+        # ]
+
+        # m.d.comb += [
+        #     overlay_r.eq(Mux(decoded_de0, 255, 0)),
+        #     overlay_g.eq(Mux(decoded_hsync, 255, 0)),
+        #     overlay_b.eq(Mux(decoded_vsync, 255, 0)),
+        # ]
 
 
         m.submodules.vga2dvid = vga2dvid = VGA2DVID(
             # in_r=Const(127, 8),
             # in_g=Const(63, 8),
-            # in_b=Const(42, 8),
+            # in_b=Const(31, 8),
             in_r=overlay_r,
             in_g=overlay_g,
             in_b=overlay_b,
             # in_blank=decoded_de0,
             # in_hsync=decoded_hsync,
             # in_vsync=decoded_vsync,
+            # in_blank = ~(decoded_hsync | decoded_vsync),
             in_blank = vga_output.blank,
-            in_hsync = vga_output.hs,
-            in_vsync = vga_output.vs,
+            # in_hsync = vga_output.hs,
+            # in_vsync = vga_output.vs,
+            in_hsync = 0,
+            in_vsync = 0,
             in_c1=Cat(decoded_ctl0, decoded_ctl1),
             in_c2=Cat(decoded_ctl2, decoded_ctl3),
 
