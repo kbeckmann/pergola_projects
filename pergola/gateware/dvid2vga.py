@@ -66,6 +66,11 @@ class DVID2VGA(Elaboratable):
 
         self.xdr = xdr
 
+        self.d0_full = Signal(20)
+        self.d0_offset = Signal(4)
+        self.d0 = Signal(10)
+        self.d0_r = Signal(10)
+
     def elaborate(self, platform):
         in_d0 = self.in_d0
         in_d1 = self.in_d1
@@ -73,10 +78,11 @@ class DVID2VGA(Elaboratable):
 
         m = Module()
 
-        d0_full = Signal(20)
-        d0_offset = Signal(4)
-        d0 = Signal(10)
-        d0_r = Signal(10)
+        d0_full = self.d0_full
+        d0_offset = self.d0_offset
+        d0 = self.d0
+        d0_r = self.d0_r
+
 
         d1_full = Signal(20)
         d1_offset = Signal(4)
@@ -92,6 +98,15 @@ class DVID2VGA(Elaboratable):
         m.d.comb += d1_offset.eq(1)
         m.d.comb += d2_offset.eq(1)
 
+        # FIXME: Shift order?
+        # m.d.shift += d0_full.eq(Cat(in_d0, d0_full[:-1]))
+        # m.d.shift += d1_full.eq(Cat(in_d1, d1_full[:-1]))
+        # m.d.shift += d2_full.eq(Cat(in_d2, d2_full[:-1]))
+
+        m.d.shift += d0_full.eq(Cat(d0_full[1:], in_d0))
+        m.d.shift += d1_full.eq(Cat(d1_full[1:], in_d1))
+        m.d.shift += d2_full.eq(Cat(d2_full[1:], in_d2))
+
         for (sig, sig_full, sig_offset) in [
             (d0, d0_full, d0_offset),
             (d1, d1_full, d1_offset),
@@ -103,27 +118,14 @@ class DVID2VGA(Elaboratable):
                 with m.Case():
                     m.d.comb += sig.eq(sig_full[0:10])
 
-        # FIXME: Shift order?
-        # m.d.shift += d0_full.eq(Cat(in_d0, d0_full[:-1]))
-        # m.d.shift += d1_full.eq(Cat(in_d1, d1_full[:-1]))
-        # m.d.shift += d2_full.eq(Cat(in_d2, d2_full[:-1]))
-
-        m.d.shift += d0_full.eq(Cat(d0_full[1:], in_d0))
-        m.d.shift += d1_full.eq(Cat(d1_full[1:], in_d1))
-        m.d.shift += d2_full.eq(Cat(d2_full[1:], in_d2))
 
         m.d.sync += d0_r.eq(d0)
         m.d.sync += d1_r.eq(d1)
         m.d.sync += d2_r.eq(d2)
 
-        # FIXME: Why are these flipped?
-        c0 = Signal(2)
-        m.d.comb += self.out_hsync.eq(c0[1])
-        m.d.comb += self.out_vsync.eq(c0[0])
-
-        m.submodules.tmds_dec_d0 = TMDSDecoder(d0_r, self.out_b, c0, self.out_de0)
-        m.submodules.tmds_dec_d1 = TMDSDecoder(d1_r, self.out_g, Cat(self.out_ctl0, self.out_ctl1), self.out_de1)
-        m.submodules.tmds_dec_d2 = TMDSDecoder(d2_r, self.out_r, Cat(self.out_ctl2, self.out_ctl3), self.out_de2)
+        m.submodules.tmds_dec_d0 = TMDSDecoder(d0_r, self.out_b, Cat(self.out_hsync, self.out_vsync), self.out_de0)
+        m.submodules.tmds_dec_d1 = TMDSDecoder(d1_r, self.out_g, Cat(self.out_ctl0,  self.out_ctl1),  self.out_de1)
+        m.submodules.tmds_dec_d2 = TMDSDecoder(d2_r, self.out_r, Cat(self.out_ctl2,  self.out_ctl3),  self.out_de2)
 
         return m
 
@@ -194,7 +196,7 @@ class DVID2VGATest(FHDLTestCase):
         tmds_clk = Signal(xdr)
 
         # Convert vga signal to DVID TMDS signals
-        m.submodules.vga2dvid = VGA2DVID(
+        m.submodules.vga2dvid = vga2dvid = VGA2DVID(
             in_r = src_r,
             in_g = src_g,
             in_b = src_b,
@@ -224,7 +226,7 @@ class DVID2VGATest(FHDLTestCase):
         decoded_ctl2 = Signal()
         decoded_ctl3 = Signal()
 
-        m.submodules.dvid2vga = DVID2VGA(
+        m.submodules.dvid2vga = dvid2vga = DVID2VGA(
             in_d0=tmds_d0,
             in_d1=tmds_d1,
             in_d2=tmds_d2,
@@ -245,25 +247,56 @@ class DVID2VGATest(FHDLTestCase):
             xdr=xdr,
         )
 
+        decoded_hsync_r = Signal()
+        decoded_vsync_r = Signal()
+        decoded_hen = Signal()
+        decoded_ven = Signal()
+
+        m.d.sync += decoded_hsync_r.eq(decoded_hsync)
+        m.d.sync += decoded_vsync_r.eq(decoded_vsync)
+
+        with m.If(~decoded_hsync_r & decoded_hsync):
+            m.d.sync += decoded_hen.eq(0)
+        with m.Elif(decoded_hsync_r & ~decoded_hsync):
+            m.d.sync += decoded_hen.eq(1)
+
+        with m.If(~decoded_vsync_r & decoded_vsync):
+            m.d.sync += decoded_ven.eq(0)
+        with m.Elif(decoded_vsync_r & ~decoded_vsync):
+            m.d.sync += decoded_ven.eq(1)
+
+
+        
+
         # Show decoded vga signals in SDL window
         m.submodules.vga_phy = Instance("vga_phy",
             p_width=640,
             p_height=480,
             i_clk=ClockSignal(),
-            i_hs=decoded_hsync,
-            i_vs=decoded_vsync,
+            i_hen=decoded_hen & decoded_de0,
+            i_ven=decoded_ven & decoded_de0,
             i_r=decoded_r,
             i_g=decoded_g,
             i_b=decoded_b)
 
-        output = cxxrtl.convert(m, black_boxes={"vga_phy": r"""
+        output = cxxrtl.convert(m, 
+                                ports=(
+                                    decoded_de0,
+                                    decoded_hsync,
+                                    decoded_vsync,
+                                    dvid2vga.d0_full,
+                                    dvid2vga.d0_offset,
+                                    dvid2vga.d0,
+                                    dvid2vga.d0_r
+                                ),
+                                black_boxes={"vga_phy": r"""
 attribute \cxxrtl_blackbox 1
 attribute \blackbox 1
 module \vga_phy
   attribute \cxxrtl_edge "p"
   wire input 1 \clk
-  wire input 2 \hs
-  wire input 3 \vs
+  wire input 2 \hen
+  wire input 3 \ven
   wire width 8 input 4 \r
   wire width 8 input 5 \g
   wire width 8 input 6 \b
@@ -330,12 +363,12 @@ struct sdl_vga_phy : public cxxrtl_design::bb_p_vga__phy {
 
   bool eval() override {
     if (posedge_p_clk()) {
-        if (bool(p_hs) && bool(p_vs) && beamAt < pixels.size()) {
+        if (bool(p_hen) && bool(p_ven) && beamAt < pixels.size()) {
             pixels[beamAt++] = p_r.get<uint8_t>();
             pixels[beamAt++] = p_g.get<uint8_t>();
             pixels[beamAt++] = p_b.get<uint8_t>();
         }
-        if (!bool(p_vs) && beamAt == pixels.size()) {
+        if (!bool(p_ven) && beamAt == pixels.size()) {
             SDL_UpdateTexture(framebuffer, NULL, pixels.data(), stride);
             SDL_RenderCopy(renderer, framebuffer, NULL, NULL);
             SDL_RenderPresent(renderer);
