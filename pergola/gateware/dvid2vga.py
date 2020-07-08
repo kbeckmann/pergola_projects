@@ -228,6 +228,8 @@ class DVID2VGATest(FHDLTestCase):
             in_blank = vga_output.blank,
             in_hsync = vga_output.hs,
             in_vsync = vga_output.vs,
+            in_c1=Signal(2),
+            in_c2=Signal(2),
             out_r = tmds_d2,
             out_g = tmds_d1,
             out_b = tmds_d0,
