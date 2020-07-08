@@ -1,4 +1,5 @@
 from nmigen import *
+from nmigen.lib.cdc import *
 from .tmds import TMDSEncoder, TMDSDecoder
 from ..util.test import FHDLTestCase
 
@@ -68,7 +69,7 @@ class DVID2VGA(Elaboratable):
 
         self.d0_full = Signal(20)
         self.d0_offset = Signal(4)
-        self.d0_offset_ctr = Signal(12, reset=2**12-1)
+        self.d0_offset_ctr = Signal(16, reset=2**12-1)
         self.d0 = Signal(10)
         self.d0_r = Signal(10)
 
@@ -76,6 +77,8 @@ class DVID2VGA(Elaboratable):
         in_d0 = self.in_d0
         in_d1 = self.in_d1
         in_d2 = self.in_d2
+
+        xdr = self.xdr
 
         m = Module()
 
@@ -85,6 +88,8 @@ class DVID2VGA(Elaboratable):
         d0 = self.d0
         d0_r = self.d0_r
 
+        # sync -> shift domain
+        d0_offset_shift = Signal(4)
 
         d1_full = Signal(20)
         # d1_offset = Signal(4)
@@ -96,14 +101,14 @@ class DVID2VGA(Elaboratable):
         d2 = Signal(10)
         d2_r = Signal(10)
 
-        m.d.shift += d0_full.eq(Cat(d0_full[1:], in_d0))
-        m.d.shift += d1_full.eq(Cat(d1_full[1:], in_d1))
-        m.d.shift += d2_full.eq(Cat(d2_full[1:], in_d2))
+        m.d.shift += d0_full.eq(Cat(d0_full[xdr:], in_d0))
+        m.d.shift += d1_full.eq(Cat(d1_full[xdr:], in_d1))
+        m.d.shift += d2_full.eq(Cat(d2_full[xdr:], in_d2))
 
         for (sig, sig_full, sig_offset) in [
-            (d0, d0_full, d0_offset),
-            (d1, d1_full, d0_offset),   # TODO: Individual phase alignment
-            (d2, d2_full, d0_offset)]:  # TODO: Individual phase alignment
+            (d0, d0_full, d0_offset_shift),
+            (d1, d1_full, d0_offset_shift),   # TODO: Individual phase alignment
+            (d2, d2_full, d0_offset_shift)]:  # TODO: Individual phase alignment
             with m.Switch(sig_offset):
                 for i in range(10):
                     with m.Case(i):
@@ -111,16 +116,24 @@ class DVID2VGA(Elaboratable):
                 with m.Case():
                     m.d.comb += sig.eq(sig_full[0:10])
 
+        d0_r_r = Signal(10)
+        d1_r_r = Signal(10)
+        d2_r_r = Signal(10)
+        m.submodules += FFSynchronizer(d0, d0_r, o_domain="shift")
+        m.submodules += FFSynchronizer(d1, d1_r, o_domain="shift")
+        m.submodules += FFSynchronizer(d2, d2_r, o_domain="shift")
 
-        m.d.sync += d0_r.eq(d0)
-        m.d.sync += d1_r.eq(d1)
-        m.d.sync += d2_r.eq(d2)
+        # shift -> sync (10x !)
+        m.submodules += FFSynchronizer(d0_r, d0_r_r)
+        m.submodules += FFSynchronizer(d1_r, d1_r_r)
+        m.submodules += FFSynchronizer(d2_r, d2_r_r)
 
-        m.submodules.tmds_dec_d0 = TMDSDecoder(d0_r, self.out_b, Cat(self.out_hsync, self.out_vsync), self.out_de0)
-        m.submodules.tmds_dec_d1 = TMDSDecoder(d1_r, self.out_g, Cat(self.out_ctl0,  self.out_ctl1),  self.out_de1)
-        m.submodules.tmds_dec_d2 = TMDSDecoder(d2_r, self.out_r, Cat(self.out_ctl2,  self.out_ctl3),  self.out_de2)
+        m.submodules.tmds_dec_d0 = TMDSDecoder(d0_r_r, self.out_b, Cat(self.out_hsync, self.out_vsync), self.out_de0)
+        m.submodules.tmds_dec_d1 = TMDSDecoder(d1_r_r, self.out_g, Cat(self.out_ctl0,  self.out_ctl1),  self.out_de1)
+        m.submodules.tmds_dec_d2 = TMDSDecoder(d2_r_r, self.out_r, Cat(self.out_ctl2,  self.out_ctl3),  self.out_de2)
 
-
+        # Recover the signal by searching for two (pixel-)clock cycles
+        # of ~de0 (any sync word on d0)
         de0_r = Signal()
         m.d.sync += de0_r.eq(self.out_de0)
         with m.If(self.out_de0):
@@ -135,6 +148,9 @@ class DVID2VGA(Elaboratable):
                 m.d.sync += d0_offset.eq(0)
             with m.Else():
                 m.d.sync += d0_offset.eq(d0_offset + 1)
+
+        # Move to shift cd safely
+        m.submodules += FFSynchronizer(d0_offset, d0_offset_shift)
 
         return m
 
@@ -274,8 +290,6 @@ class DVID2VGATest(FHDLTestCase):
         with m.Elif(decoded_vsync_r & ~decoded_vsync):
             m.d.sync += decoded_ven.eq(1)
 
-
-        
 
         # Show decoded vga signals in SDL window
         m.submodules.vga_phy = Instance("vga_phy",

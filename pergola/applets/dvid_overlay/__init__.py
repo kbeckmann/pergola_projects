@@ -7,239 +7,93 @@ from nmigen.back.pysim import Simulator, Active
 from ...util.test import FHDLTestCase
 # from ...util.cdc import SafeFFSynchronizer
 from ...gateware.tmds import TMDSEncoder, TMDSDecoder
+from ...gateware.dvid2vga import DVID2VGA
+from ...gateware.vga2dvid import VGA2DVID
 
 class DVIDOverlay(Elaboratable):
-    def __init__(self, dvid_in, dvid_out, dvid_clk_out):
+    def __init__(self, dvid_in, dvid_out, dvid_clk_out, debug):
         self.dvid_in = dvid_in
         self.dvid_out = dvid_out
         self.dvid_clk_out = dvid_clk_out
+        self.debug = debug
 
     def elaborate(self, platform):
         dvid_in = self.dvid_in
         dvid_out = self.dvid_out
         dvid_clk_out = self.dvid_clk_out
+        xdr = 1
 
         m = Module()
+        
+        # shift_clock_initial = 0b0000011111
+        # C_shift_clock_initial = Const(0b0000011111)
+        # shift_clock = Signal(10, reset=shift_clock_initial)
+        # m.d.shift += shift_clock.eq(Cat(shift_clock[xdr:], shift_clock[:xdr]))
 
-        sampled_b = Signal(20)
-        sampled_g = Signal(20)
-        sampled_r = Signal(20)
+        # m.d.shift += [
+        #     dvid_out.eq(dvid_in),
+        #     dvid_clk_out.eq(shift_clock[xdr:])
+        # ]
 
-        sampled_b_r = Signal(20)
-        sampled_g_r = Signal(20)
-        sampled_r_r = Signal(20)
+        decoded_r = Signal(8)
+        decoded_g = Signal(8)
+        decoded_b = Signal(8)
+        decoded_de0 = Signal()
+        decoded_hsync = Signal()
+        decoded_vsync = Signal()
+        decoded_de1 = Signal()
+        decoded_ctl0 = Signal()
+        decoded_ctl1 = Signal()
+        decoded_de1 = Signal()
+        decoded_ctl2 = Signal()
+        decoded_ctl3 = Signal()
 
-        sampled_b_r_r = Signal(20)
-        sampled_g_r_r = Signal(20)
-        sampled_r_r_r = Signal(20)
+        m.submodules.dvid2vga = dvid2vga = DVID2VGA(
+            in_d0=self.dvid_in[0],
+            in_d1=self.dvid_in[1],
+            in_d2=self.dvid_in[2],
 
-        sampled_b_r_r_r = Signal(10)
-        sampled_g_r_r_r = Signal(10)
-        sampled_r_r_r_r = Signal(10)
+            out_r=decoded_r,
+            out_g=decoded_g,
+            out_b=decoded_b,
+            out_de0=decoded_de0,
+            out_hsync=decoded_hsync,
+            out_vsync=decoded_vsync,
+            out_de1=decoded_de1,
+            out_ctl0=decoded_ctl0,
+            out_ctl1=decoded_ctl1,
+            out_de2=decoded_de1,
+            out_ctl2=decoded_ctl2,
+            out_ctl3=decoded_ctl3,
 
-        m.d.shift += [
-            sampled_b.eq(Cat(dvid_in[0], sampled_b[:-1])),
-            sampled_g.eq(Cat(dvid_in[1], sampled_g[:-1])),
-            sampled_r.eq(Cat(dvid_in[2], sampled_r[:-1])),
-
-            sampled_b_r.eq(sampled_b),
-            sampled_g_r.eq(sampled_g),
-            sampled_r_r.eq(sampled_r),
-        ]
-
-        m.d.sync += [
-            sampled_b_r_r.eq(sampled_b_r),
-            sampled_g_r_r.eq(sampled_g_r),
-            sampled_r_r_r.eq(sampled_r_r),
-        ]
-
-        bitslip_b = Signal(4, reset=3)
-        bitslip_g = Signal(4)
-        bitslip_r = Signal(4)
-
-        with m.Switch(bitslip_b):
-            with m.Case(0):
-                sampled_b_r_r_r.eq(sampled_b_r_r[0:10]),
-            with m.Case(1):
-                sampled_b_r_r_r.eq(sampled_b_r_r[1:11]),
-            with m.Case(2):
-                sampled_b_r_r_r.eq(sampled_b_r_r[2:12]),
-            with m.Case(3):
-                sampled_b_r_r_r.eq(sampled_b_r_r[3:13]),
-            with m.Case(4):
-                sampled_b_r_r_r.eq(sampled_b_r_r[4:14]),
-            with m.Case(5):
-                sampled_b_r_r_r.eq(sampled_b_r_r[5:15]),
-            with m.Case(6):
-                sampled_b_r_r_r.eq(sampled_b_r_r[6:16]),
-            with m.Case(7):
-                sampled_b_r_r_r.eq(sampled_b_r_r[7:17]),
-            with m.Case(8):
-                sampled_b_r_r_r.eq(sampled_b_r_r[8:18]),
-            with m.Case(9):
-                sampled_b_r_r_r.eq(sampled_b_r_r[9:19]),
-            with m.Case():
-                sampled_b_r_r_r.eq(sampled_b_r_r[0:10]),
-    
-        with m.Switch(bitslip_g):
-            with m.Case(0):
-                sampled_g_r_r_r.eq(sampled_g_r_r[0:10]),
-            with m.Case(1):
-                sampled_g_r_r_r.eq(sampled_g_r_r[1:11]),
-            with m.Case(2):
-                sampled_g_r_r_r.eq(sampled_g_r_r[2:12]),
-            with m.Case(3):
-                sampled_g_r_r_r.eq(sampled_g_r_r[3:13]),
-            with m.Case(4):
-                sampled_g_r_r_r.eq(sampled_g_r_r[4:14]),
-            with m.Case(5):
-                sampled_g_r_r_r.eq(sampled_g_r_r[5:15]),
-            with m.Case(6):
-                sampled_g_r_r_r.eq(sampled_g_r_r[6:16]),
-            with m.Case(7):
-                sampled_g_r_r_r.eq(sampled_g_r_r[7:17]),
-            with m.Case(8):
-                sampled_g_r_r_r.eq(sampled_g_r_r[8:18]),
-            with m.Case(9):
-                sampled_g_r_r_r.eq(sampled_g_r_r[9:19]),
-            with m.Case():
-                sampled_g_r_r_r.eq(sampled_g_r_r[0:10]),
-    
-        with m.Switch(bitslip_r):
-            with m.Case(0):
-                sampled_r_r_r_r.eq(sampled_r_r_r[0:10]),
-            with m.Case(1):
-                sampled_r_r_r_r.eq(sampled_r_r_r[1:11]),
-            with m.Case(2):
-                sampled_r_r_r_r.eq(sampled_r_r_r[2:12]),
-            with m.Case(3):
-                sampled_r_r_r_r.eq(sampled_r_r_r[3:13]),
-            with m.Case(4):
-                sampled_r_r_r_r.eq(sampled_r_r_r[4:14]),
-            with m.Case(5):
-                sampled_r_r_r_r.eq(sampled_r_r_r[5:15]),
-            with m.Case(6):
-                sampled_r_r_r_r.eq(sampled_r_r_r[6:16]),
-            with m.Case(7):
-                sampled_r_r_r_r.eq(sampled_r_r_r[7:17]),
-            with m.Case(8):
-                sampled_r_r_r_r.eq(sampled_r_r_r[8:18]),
-            with m.Case(9):
-                sampled_r_r_r_r.eq(sampled_r_r_r[9:19]),
-            with m.Case():
-                sampled_r_r_r_r.eq(sampled_r_r_r[0:10]),
-
-        shift_clock_initial = 0b0000011111
-        C_shift_clock_initial = Const(shift_clock_initial)
-        shift_clock = Signal(10, reset=shift_clock_initial)
-
-        m.d.shift += shift_clock.eq(Cat(shift_clock[1:], shift_clock[:1]))
-
-        pixel_b = Signal(8)
-        active_b = Signal()
-        c_b = Signal(2)
-        pixel_g = Signal(8)
-        active_g = Signal()
-        c_g = Signal(2)
-        pixel_r = Signal(8)
-        active_r = Signal()
-        c_r = Signal(2)
-
-        m.submodules.decoder_b = decoder_b = TMDSDecoder(
-            data_in=sampled_b_r_r_r,
-            data_out=pixel_b,
-            c=c_b,
-            active_data=active_b,
+            xdr=xdr
         )
 
-        m.submodules.decoder_g = decoder_g = TMDSDecoder(
-            data_in=sampled_g_r_r_r,
-            data_out=pixel_g,
-            c=c_g,
-            active_data=active_g,
+        tmds_d0 = Signal(xdr)
+        tmds_d1 = Signal(xdr)
+        tmds_d2 = Signal(xdr)
+
+        m.d.comb += dvid_out.eq(Cat(tmds_d0, tmds_d1, tmds_d2))
+
+        m.submodules.vga2dvid = vga2dvid = VGA2DVID(
+            in_r=decoded_r,
+            in_g=decoded_g,
+            in_b=decoded_b,
+            in_blank=~decoded_de0,
+            in_hsync=decoded_hsync,
+            in_vsync=decoded_vsync,
+
+            out_r=tmds_d2,
+            out_g=tmds_d1,
+            out_b=tmds_d0,
+            out_clock=dvid_clk_out,
+
+            xdr=xdr
         )
 
-        m.submodules.decoder_r = decoder_r = TMDSDecoder(
-            data_in=sampled_r_r_r_r,
-            data_out=pixel_r,
-            c=c_r,
-            active_data=active_r,
-        )
+        # m.d.comb += self.debug.eq(Cat(decoded_de0, decoded_hsync, decoded_vsync))
+        # m.d.comb += self.debug.eq(dvid2vga.d0_offset)
 
-
-        encoded_blue = Signal(10)
-        encoded_red = Signal(10)
-        encoded_green = Signal(10)
-
-        encoded_blue_r = Signal(10)
-        encoded_red_r = Signal(10)
-        encoded_green_r = Signal(10)
-
-        encoded_blue_r_r = Signal(10)
-        encoded_red_r_r = Signal(10)
-        encoded_green_r_r = Signal(10)
-
-        m.submodules.encoder_b = encoder_b = TMDSEncoder(
-            data=pixel_b,
-            c=c_b,
-            blank=~active_b,
-            encoded=encoded_blue,
-        )
-
-        m.submodules.encoder_g = encoder_g = TMDSEncoder(
-            data=pixel_g,
-            c=c_g,
-            blank=~active_g,
-            encoded=encoded_green,
-        )
-
-        m.submodules.encoder_r = encoder_r = TMDSEncoder(
-            data=pixel_r,
-            c=c_r,
-            blank=~active_r,
-            encoded=encoded_red,
-        )
-
-        m.d.sync += [
-            encoded_blue_r.eq(encoded_blue),
-            encoded_green_r.eq(encoded_green),
-            encoded_red_r.eq(encoded_red),
-
-            encoded_blue_r_r.eq(encoded_blue_r),
-            encoded_green_r_r.eq(encoded_green_r),
-            encoded_red_r_r.eq(encoded_red_r),
-        ]
-
-
-        shift_red   = Signal(10)
-        shift_green = Signal(10)
-        shift_blue  = Signal(10)
-
-        with m.If(shift_clock[4:6] == C_shift_clock_initial[4:6]):
-            m.d.shift += shift_blue.eq(encoded_blue_r_r)
-            m.d.shift += shift_green.eq(encoded_green_r_r)
-            m.d.shift += shift_red.eq(encoded_red_r_r)
-        with m.Else():
-            m.d.shift += shift_blue.eq(Cat(shift_blue[1:], 0))
-            m.d.shift += shift_green.eq(Cat(shift_green[1:], 0))
-            m.d.shift += shift_red.eq(Cat(shift_red[1:], 0))
-
-        # Output the re-encoded signal
-        # m.d.comb += dvid_out.eq(Cat(~dvid_in[0], ~dvid_in[1], dvid_in[2]))
-        m.d.comb += dvid_out.eq(Cat(shift_blue[0], ~shift_green[0], ~shift_red[0]))
-
-        # Just to test input sampling:
-        # Output sampled data from shift domain directly (not using decoded, encoded data)
-        # m.d.comb += dvid_out.eq(Cat(sampled_b[0], sampled_g[0], sampled_r[0]))
-
-
-
-        # leds = Cat([platform.request("led", i) for i in range(8)])
-        # # m.d.sync += leds.eq(shift_clock[:8])
-        # # m.d.comb += leds.eq(shift_clock[:8])
-        # m.d.comb += leds.eq(shift_blue[:8])
-
-        m.d.comb += dvid_clk_out.eq(shift_clock[0])
 
         return m
 
@@ -340,12 +194,17 @@ class DVIDOverlayApplet(Applet, applet_name="dvid-overlay"):
         ], clock_signal_name="pmod1_lvds_clk")
 
 
+        leds = Cat([platform.request("led", i) for i in range(8)])
+
         dvid_in_tmp = Signal(3)
         dvid_out_tmp = Signal(3)
         m.d.comb += [
             dvid_in_tmp.eq(Cat(~dvid_in[0], dvid_in[1], ~dvid_in[2])),
             dvid_out.eq(Cat(dvid_out_tmp[0], ~dvid_out_tmp[1], ~dvid_out_tmp[2])),
         ]
-        m.submodules += DVIDOverlay(dvid_in_tmp, dvid_out_tmp, dvid_clk_out)
+        m.submodules.overlay = DVIDOverlay(dvid_in_tmp, dvid_out_tmp, dvid_clk_out, leds)
+
+
+
 
         return m
