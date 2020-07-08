@@ -548,8 +548,8 @@ class DVIDSim(FHDLTestCase):
             p_width=1280,
             p_height=720,
             i_clk=ClockSignal(),
-            i_hs=h_en,
-            i_vs=v_en,
+            i_hen=h_en,
+            i_ven=v_en,
             i_r=r,
             i_g=g,
             i_b=b)
@@ -560,8 +560,8 @@ attribute \blackbox 1
 module \vga_phy
   attribute \cxxrtl_edge "p"
   wire input 1 \clk
-  wire input 2 \hs
-  wire input 3 \vs
+  wire input 2 \hen
+  wire input 3 \ven
   wire width 8 input 4 \r
   wire width 8 input 5 \g
   wire width 8 input 6 \b
@@ -628,12 +628,12 @@ struct sdl_vga_phy : public cxxrtl_design::bb_p_vga__phy {
 
   bool eval() override {
     if (posedge_p_clk()) {
-        if (bool(p_hs) && bool(p_vs) && beamAt < pixels.size()) {
+        if (bool(p_hen) && bool(p_ven) && beamAt < pixels.size()) {
             pixels[beamAt++] = p_r.get<uint8_t>();
             pixels[beamAt++] = p_g.get<uint8_t>();
             pixels[beamAt++] = p_b.get<uint8_t>();
         }
-        if (!bool(p_vs) && beamAt == pixels.size()) {
+        if (!bool(p_ven) && beamAt == pixels.size()) {
             SDL_UpdateTexture(framebuffer, NULL, pixels.data(), stride);
             SDL_RenderCopy(renderer, framebuffer, NULL, NULL);
             SDL_RenderPresent(renderer);
