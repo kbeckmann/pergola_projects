@@ -215,17 +215,17 @@ class TMDSDecoder(Elaboratable):
             m.d.sync += sometimes_inverted.eq(data_delayed[:9])
 
         with m.Switch(data_in):
-            with m.Case(0b0010101011):
-                m.d.sync += next_c.eq(0b01)
-                m.d.sync += next_active_data.eq(0)
             with m.Case(0b1101010100):
                 m.d.sync += next_c.eq(0b00)
+                m.d.sync += next_active_data.eq(0)
+            with m.Case(0b0010101011):
+                m.d.sync += next_c.eq(0b01)
                 m.d.sync += next_active_data.eq(0)
             with m.Case(0b0101010100):
                 m.d.sync += next_c.eq(0b10)
                 m.d.sync += next_active_data.eq(0)
             with m.Case(0b1010101011):
-                m.d.sync += next_c.eq(0b00)
+                m.d.sync += next_c.eq(0b11)
                 m.d.sync += next_active_data.eq(0)
             with m.Default():
                 m.d.sync += next_c.eq(0b00)
