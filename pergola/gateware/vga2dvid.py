@@ -72,13 +72,15 @@ class VGA2DVID(Elaboratable):
     """
 
 
-    def __init__(self, in_r, in_g, in_b, in_blank, in_hsync, in_vsync, out_r, out_g, out_b, out_clock, xdr=1):
+    def __init__(self, in_r, in_g, in_b, in_blank, in_hsync, in_vsync, in_c1, in_c2, out_r, out_g, out_b, out_clock, xdr=1):
         self.in_r = in_r
         self.in_g = in_g
         self.in_b = in_b
         self.in_blank = in_blank
         self.in_hsync = in_hsync
         self.in_vsync = in_vsync
+        self.in_c1 = in_c1
+        self.in_c2 = in_c2
         self.out_r = out_r
         self.out_g = out_g
         self.out_b = out_b
@@ -90,19 +92,17 @@ class VGA2DVID(Elaboratable):
 
         xdr = self.xdr
 
-        c_red = Signal(2)
-        c_green = Signal(2)
-        c_blue = Signal(2)
-        m.d.comb += c_blue.eq(Cat(self.in_hsync, self.in_vsync))
+        c0 = Signal(2)
+        m.d.comb += c0.eq(Cat(self.in_hsync, self.in_vsync))
 
         if xdr == 1 or xdr == 2:
             encoded_red = Signal(10)
             encoded_green = Signal(10)
             encoded_blue = Signal(10)
 
-            m.submodules.tmds_r = tmds_r = TMDSEncoder(data=self.in_r, c=c_red,   blank=self.in_blank, encoded=encoded_red)
-            m.submodules.tmds_g = tmds_g = TMDSEncoder(data=self.in_g, c=c_green, blank=self.in_blank, encoded=encoded_green)
-            m.submodules.tmds_b = tmds_b = TMDSEncoder(data=self.in_b, c=c_blue,  blank=self.in_blank, encoded=encoded_blue)
+            m.submodules.tmds_b = tmds_b = TMDSEncoder(data=self.in_b, c=c0,         blank=self.in_blank, encoded=encoded_blue)
+            m.submodules.tmds_g = tmds_g = TMDSEncoder(data=self.in_g, c=self.in_c1, blank=self.in_blank, encoded=encoded_green)
+            m.submodules.tmds_r = tmds_r = TMDSEncoder(data=self.in_r, c=self.in_c2, blank=self.in_blank, encoded=encoded_red)
 
             shift_clock_initial = 0b0000011111
             C_shift_clock_initial = Const(0b0000011111)
