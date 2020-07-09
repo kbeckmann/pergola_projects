@@ -36,6 +36,7 @@ from . import blinky
 from . import clock_divider
 from . import delayf
 from . import dvid
+from . import dvid_overlay
 from . import dvid_splitter
 from . import gearbox
 from . import pll

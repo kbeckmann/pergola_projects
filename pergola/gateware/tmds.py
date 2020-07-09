@@ -120,13 +120,13 @@ class TMDSEncoder(Elaboratable):
 
         with m.If(self.blank):
             with m.Switch(self.c):
-                with m.Case(0b00):
+                with m.Case(0b11):
                     m.d.sync += self.encoded.eq(0b1101010100)
                 with m.Case(0b01):
                     m.d.sync += self.encoded.eq(0b0010101011)
                 with m.Case(0b10):
                     m.d.sync += self.encoded.eq(0b0101010100)
-                with m.Case(0b11):
+                with m.Case(0b0):
                     m.d.sync += self.encoded.eq(0b1010101011)
             m.d.sync += disparity.eq(0)
 
@@ -176,18 +176,17 @@ class TMDSDecoder(Elaboratable):
         c = self.c
         active_data = self.active_data
 
-        data_delayed = Signal(10)
         sometimes_inverted = Signal(9)
-        next_c = Signal(2)
-        next_active_data = Signal()
 
-        m.d.sync += c.eq(next_c)
-        m.d.sync += active_data.eq(next_active_data)
+        with m.If(data_in[9] == 1):
+            m.d.sync += sometimes_inverted.eq(Cat(~data_in[:8], data_in[8]))
+        with m.Else():
+            m.d.sync += sometimes_inverted.eq(data_in[:9])
 
-        with m.If(next_active_data == 0):
-            m.d.sync += data_out.eq(0)
+        with m.If(active_data == 0):
+            m.d.comb += data_out.eq(0)
         with m.Elif(sometimes_inverted[8] == 1):
-            m.d.sync += data_out.eq(Cat(
+            m.d.comb += data_out.eq(Cat(
                 sometimes_inverted[0],
                 sometimes_inverted[1] ^ sometimes_inverted[0],
                 sometimes_inverted[2] ^ sometimes_inverted[1],
@@ -198,7 +197,7 @@ class TMDSDecoder(Elaboratable):
                 sometimes_inverted[7] ^ sometimes_inverted[6],
             ))
         with m.Else():
-            m.d.sync += data_out.eq(Cat(
+            m.d.comb += data_out.eq(Cat(
                 sometimes_inverted[0],
                 ~(sometimes_inverted[1] ^ sometimes_inverted[0]),
                 ~(sometimes_inverted[2] ^ sometimes_inverted[1]),
@@ -209,29 +208,22 @@ class TMDSDecoder(Elaboratable):
                 ~(sometimes_inverted[7] ^ sometimes_inverted[6]),
             ))
 
-        with m.If(data_delayed[9] == 1):
-            m.d.sync += sometimes_inverted.eq(Cat(~data_delayed[:8], data_delayed[8]))
-        with m.Else():
-            m.d.sync += sometimes_inverted.eq(data_delayed[:9])
-
         with m.Switch(data_in):
             with m.Case(0b1101010100):
-                m.d.sync += next_c.eq(0b00)
-                m.d.sync += next_active_data.eq(0)
+                m.d.sync += c.eq(0b11)
+                m.d.sync += active_data.eq(0)
             with m.Case(0b0010101011):
-                m.d.sync += next_c.eq(0b01)
-                m.d.sync += next_active_data.eq(0)
+                m.d.sync += c.eq(0b01)
+                m.d.sync += active_data.eq(0)
             with m.Case(0b0101010100):
-                m.d.sync += next_c.eq(0b10)
-                m.d.sync += next_active_data.eq(0)
+                m.d.sync += c.eq(0b10)
+                m.d.sync += active_data.eq(0)
             with m.Case(0b1010101011):
-                m.d.sync += next_c.eq(0b11)
-                m.d.sync += next_active_data.eq(0)
+                m.d.sync += c.eq(0b00)
+                m.d.sync += active_data.eq(0)
             with m.Default():
-                m.d.sync += next_c.eq(0b00)
-                m.d.sync += next_active_data.eq(1)
-
-        m.d.sync += data_delayed.eq(data_in)
+                m.d.sync += c.eq(0b00)
+                m.d.sync += active_data.eq(1)
 
         return m
 
