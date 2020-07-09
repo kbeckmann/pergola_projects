@@ -147,9 +147,9 @@ class VGA2DVID(Elaboratable):
             encoded_green_r = Signal(10)
             encoded_blue_r = Signal(10)
 
-            m.submodules.tmds_r = tmds_r = TMDSEncoder(data=self.in_r, c=c_red,   blank=self.in_blank, encoded=encoded_red)
-            m.submodules.tmds_g = tmds_g = TMDSEncoder(data=self.in_g, c=c_green, blank=self.in_blank, encoded=encoded_green)
-            m.submodules.tmds_b = tmds_b = TMDSEncoder(data=self.in_b, c=c_blue,  blank=self.in_blank, encoded=encoded_blue)
+            m.submodules.tmds_b = tmds_b = TMDSEncoder(data=self.in_b, c=c0,  blank=self.in_blank, encoded=encoded_blue)
+            m.submodules.tmds_g = tmds_g = TMDSEncoder(data=self.in_g, c=self.in_c1, blank=self.in_blank, encoded=encoded_green)
+            m.submodules.tmds_r = tmds_r = TMDSEncoder(data=self.in_r, c=self.in_c2,   blank=self.in_blank, encoded=encoded_red)
 
             shift_clock_initial = 0b00000111110000011111
             C_shift_clock_initial = Const(shift_clock_initial)
