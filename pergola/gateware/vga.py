@@ -150,3 +150,32 @@ class VGAOutputSubtarget(Elaboratable):
             m.d.sync += self.v_ctr.eq(0)
 
         return m
+
+class DynamicVGAOutputSubtarget(VGAOutputSubtarget):
+    def __init__(self, output, r=None, g=None, b=None):
+
+        self.output = output
+
+        self.h_front = Signal(8)
+        self.h_sync = Signal(8)
+        self.h_back = Signal(8)
+        self.h_active = Signal(12)
+
+        self.v_front = Signal(8)
+        self.v_sync = Signal(8)
+        self.v_back = Signal(8)
+        self.v_active = Signal(12)
+
+        self.h_total = self.h_front + self.h_sync + self.h_back + self.h_active
+        self.v_total = self.v_front + self.v_sync + self.v_back + self.v_active
+
+        self.h_ctr = Signal(12)
+        self.v_ctr = Signal(12)
+        self.h_en  = Signal()
+        self.v_en  = Signal()
+
+        self.r = r
+        self.g = g
+        self.b = b
+
+        self.reset = Signal()
