@@ -285,15 +285,15 @@ class DVIDOverlayApplet(Applet, applet_name="dvid-overlay"):
         # D1  E2/D1 (g)  inverted
         # D2  G2/F1 (r)  inverted
 
-        pixel_clk_freq = 25e6
-        xdr = 1
+        pixel_freq_mhz = 25
+        xdr = 2
 
         platform.add_resources([
             Resource("pmod1_lvds", 0, Pins("J1 L1 N1", dir="i"),
                      Attrs(IO_TYPE="LVDS", DIFFRESISTOR=100)),
             Resource("pmod1_lvds_clk", 0, Pins("G1", dir="i"),
                      Attrs(IO_TYPE="LVDS", DIFFRESISTOR=100),
-                     Clock(pixel_clk_freq)),
+                     Clock(pixel_freq_mhz * 1e6)),
 
             Resource("pmod2_lvds", 0, Pins("C1 D1 F1", dir="o"),
                      Attrs(IO_TYPE="LVDS")),
@@ -308,11 +308,27 @@ class DVIDOverlayApplet(Applet, applet_name="dvid-overlay"):
 
         m = Module()
 
-        m.submodules.pll = pll = ECP5PLL([
-            ECP5PLLConfig("shift", (pixel_clk_freq / 1e6) * 10.),
-            ECP5PLLConfig("sync", pixel_clk_freq / 1e6),
-        ], clock_signal_name="pmod1_lvds_clk")
+        if xdr == 1:
+            pll_config = [
+                ECP5PLLConfig("shift", pixel_freq_mhz * 10.),
+                ECP5PLLConfig("sync", pixel_freq_mhz),
+            ]
+        elif xdr == 2:
+            pll_config = [
+                ECP5PLLConfig("shift", pixel_freq_mhz * 10. / 2.),
+                ECP5PLLConfig("sync", pixel_freq_mhz),
+            ]
+        elif xdr == 4:
+            pll_config = [
+                ECP5PLLConfig("shift_fast", pixel_freq_mhz * 10. / 2.),
+                ECP5PLLConfig("shift", pixel_freq_mhz * 10. / 2. / 2.),
+                ECP5PLLConfig("sync", pixel_freq_mhz),
+            ]
 
+        m.submodules.pll2 = ECP5PLL(
+            pll_config,
+            clock_signal_name="pmod1_lvds_clk",
+            clock_signal_freq=pixel_freq_mhz * 1e6)
 
         leds = Cat([platform.request("led", i) for i in range(8)])
 
@@ -323,18 +339,59 @@ class DVIDOverlayApplet(Applet, applet_name="dvid-overlay"):
         dvid_out_d1 = Signal(xdr)
         dvid_out_d2 = Signal(xdr)
         dvid_out_clk_d = Signal(xdr)
-        m.d.comb += [
-            dvid_in.i_clk.eq(ClockSignal("shift")),
-            dvid_in_d0.eq(~dvid_in.i[0]),
-            dvid_in_d1.eq( dvid_in.i[1]),
-            dvid_in_d2.eq(~dvid_in.i[2]),
 
-            dvid_out.o_clk.eq(ClockSignal("shift")),
-            dvid_out.o.eq(Cat(dvid_out_d0[0], ~dvid_out_d1[0], ~dvid_out_d2[0])),
+        if xdr == 1:
+            m.d.comb += [
+                dvid_in.i_clk.eq(ClockSignal("shift")),
+                dvid_in_d0.eq(~dvid_in.i[0]),
+                dvid_in_d1.eq( dvid_in.i[1]),
+                dvid_in_d2.eq(~dvid_in.i[2]),
 
-            dvid_out_clk.o_clk.eq(ClockSignal("shift")),
-            dvid_out_clk.o.eq(Cat(dvid_out_clk_d))
-        ]
+                dvid_out.o_clk.eq(ClockSignal("shift")),
+                dvid_out.o.eq(Cat(dvid_out_d0[0], ~dvid_out_d1[0], ~dvid_out_d2[0])),
+
+                dvid_out_clk.o_clk.eq(ClockSignal("shift")),
+                dvid_out_clk.o.eq(Cat(dvid_out_clk_d[0])),
+            ]
+        elif xdr == 2:
+            m.d.comb += [
+                dvid_in.i_clk.eq(ClockSignal("shift")),
+                dvid_in_d0.eq(~Cat(dvid_in.i0[0], dvid_in.i1[0])),
+                dvid_in_d1.eq( Cat(dvid_in.i0[1], dvid_in.i1[1])),
+                dvid_in_d2.eq(~Cat(dvid_in.i0[2], dvid_in.i1[2])),
+
+                dvid_out.o_clk.eq(ClockSignal("shift")),
+                dvid_out.o0.eq(Cat(dvid_out_d0[0], ~dvid_out_d1[0], ~dvid_out_d2[0])),
+                dvid_out.o1.eq(Cat(dvid_out_d0[1], ~dvid_out_d1[1], ~dvid_out_d2[1])),
+
+                dvid_out_clk.o_clk.eq(ClockSignal("shift")),
+                dvid_out_clk.o0.eq(Cat(dvid_out_clk_d[0])),
+                dvid_out_clk.o1.eq(Cat(dvid_out_clk_d[1])),
+            ]
+        elif xdr == 4:
+            m.d.comb += [
+                dvid_in.i_clk.eq(ClockSignal("shift")),
+                dvid_in.i_fclk.eq(ClockSignal("shift_fast")),
+                dvid_in_d0.eq(~Cat(dvid_in.i0[0], dvid_in.i1[0], dvid_in.i2[0], dvid_in.i3[0])),
+                dvid_in_d1.eq( Cat(dvid_in.i0[1], dvid_in.i1[1], dvid_in.i2[1], dvid_in.i3[1])),
+                dvid_in_d2.eq(~Cat(dvid_in.i0[2], dvid_in.i1[2], dvid_in.i2[2], dvid_in.i3[2])),
+
+                dvid_out.o_clk.eq(ClockSignal("shift")),
+                dvid_out.o_fclk.eq(ClockSignal("shift_fast")),
+                dvid_out.o0.eq(Cat(dvid_out_d0[0], ~dvid_out_d1[0], ~dvid_out_d2[0])),
+                dvid_out.o1.eq(Cat(dvid_out_d0[1], ~dvid_out_d1[1], ~dvid_out_d2[1])),
+                dvid_out.o2.eq(Cat(dvid_out_d0[2], ~dvid_out_d1[2], ~dvid_out_d2[2])),
+                dvid_out.o3.eq(Cat(dvid_out_d0[3], ~dvid_out_d1[3], ~dvid_out_d2[3])),
+
+                dvid_out_clk.o_clk.eq(ClockSignal("shift")),
+                dvid_out_clk.o_fclk.eq(ClockSignal("shift_fast")),
+                dvid_out_clk.o0.eq(Cat(dvid_out_clk_d[0])),
+                dvid_out_clk.o1.eq(Cat(dvid_out_clk_d[1])),
+                dvid_out_clk.o2.eq(Cat(dvid_out_clk_d[2])),
+                dvid_out_clk.o3.eq(Cat(dvid_out_clk_d[3])),
+            ]
+
+
         m.submodules.overlay = DVIDOverlay(
             dvid_in_d0, 
             dvid_in_d1, 
