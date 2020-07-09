@@ -106,33 +106,63 @@ class DVIDOverlay(Elaboratable):
                     v_back=33,
                     v_active=480,
                 ),
+
+
+            "1280x720p60": VGAParameters(
+                    h_front=110,
+                    h_sync=40,
+                    h_back=220,
+                    h_active=1280,
+                    v_front=5,
+                    v_sync=5,
+                    v_back=20,
+                    v_active=720,
+                ),
+                
+            "1920x1080p60": VGAParameters(
+                    h_front=88,
+                    h_sync=44,
+                    h_back=148,
+                    h_active=1920,
+                    v_front=4,
+                    v_sync=5,
+                    v_back=36,
+                    v_active=1080,
+                ),
         }
 
-        m.submodules.vga = vga = DynamicVGAOutputSubtarget(
+        # m.submodules.vga = vga = DynamicVGAOutputSubtarget(
+        #     output=vga_output,
+        # )
+
+        m.submodules.vga = vga = VGAOutputSubtarget(
+            # vga_parameters=vga_configs["640x480p60"],
+            vga_parameters=vga_configs["1280x720p60"],
+            # vga_parameters=vga_configs["1920x1080p60"],
             output=vga_output,
         )
 
         # m.d.sync += vga.h_front.eq(0)
         # m.d.sync += vga.h_sync.eq(96)
         # m.d.sync += vga.h_back.eq(48+16)
-        m.d.sync += vga.h_sync.eq(96 + 48 + 16)
-        m.d.sync += vga.h_active.eq(640)
+        # m.d.sync += vga.h_sync.eq(371)
+        # m.d.sync += vga.h_active.eq(1280)
         # m.d.sync += vga.v_front.eq(10)
         # m.d.sync += vga.v_sync.eq(2)
         # m.d.sync += vga.v_back.eq(33)
-        m.d.sync += vga.v_sync.eq(10+2+33)
-        m.d.sync += vga.v_active.eq(480)
+        # m.d.sync += vga.v_sync.eq(30)
+        # m.d.sync += vga.v_active.eq(720)
 
         # Count and detect h_sync and v_sync lengths
-        ctr = Signal(16, reset=0)
+        ctr = Signal(18, reset=0)
         with m.If(~decoded_de0):
             m.d.sync += ctr.eq(ctr + 1)
         with m.Else():
             m.d.sync += ctr.eq(0)
-            with m.If(ctr > 10000):
+            with m.If(ctr > 1000):
                 # First data enabled after vsync
-                # m.d.sync += m.submodules.vga.reset.eq(1)
-                m.d.sync += m.submodules.vga.reset.eq(0)
+                m.d.sync += m.submodules.vga.reset.eq(1)
+                # m.d.sync += m.submodules.vga.reset.eq(0)
 
         # Generate vga test image
         secondary_r = Signal(8)
@@ -153,17 +183,17 @@ class DVIDOverlay(Elaboratable):
         overlay_r = Signal(8)
         overlay_g = Signal(8)
         overlay_b = Signal(8)
-        m.d.comb += [
-            overlay_r.eq(decoded_r),
-            overlay_g.eq(decoded_g),
-            overlay_b.eq(decoded_b),
-        ]
-
         # m.d.comb += [
-        #     overlay_r.eq((decoded_r >> 1) + (secondary_r >> 1)),
-        #     overlay_g.eq((decoded_g >> 1) + (secondary_g >> 1)),
-        #     overlay_b.eq((decoded_b >> 1) + (secondary_b >> 1)),
+        #     overlay_r.eq(decoded_r),
+        #     overlay_g.eq(decoded_g),
+        #     overlay_b.eq(decoded_b),
         # ]
+
+        m.d.comb += [
+            overlay_r.eq((decoded_r >> 1) + (secondary_r >> 1)),
+            overlay_g.eq((decoded_g >> 1) + (secondary_g >> 1)),
+            overlay_b.eq((decoded_b >> 1) + (secondary_b >> 1)),
+        ]
 
         # m.d.comb += [
         #     overlay_r.eq(secondary_r),
@@ -290,7 +320,9 @@ class DVIDOverlayApplet(Applet, applet_name="dvid-overlay"):
         # D1  E2/D1 (g)  inverted
         # D2  G2/F1 (r)  inverted
 
+        # pixel_freq_mhz = 75
         pixel_freq_mhz = 25
+        # pixel_freq_mhz = 100
         xdr = 2
 
         platform.add_resources([

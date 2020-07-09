@@ -67,11 +67,10 @@ class DVID2VGA(Elaboratable):
 
         self.xdr = xdr
 
-        self.d0_full = Signal(20)
+        self.d0_full = Signal(40)
         self.d0_offset = Signal(4)
         self.d0_offset_ctr = Signal(16, reset=2**12-1)
-        self.d0 = Signal(10)
-        self.d0_r = Signal(10)
+        self.d0 = Signal(20)
 
         self.data_island = Signal()
 
@@ -90,20 +89,15 @@ class DVID2VGA(Elaboratable):
         d0_offset = self.d0_offset
         d0_offset_ctr = self.d0_offset_ctr
         d0 = self.d0
-        d0_r = self.d0_r
 
         # sync -> shift domain
         d0_offset_shift = Signal(4)
 
-        d1_full = Signal(20)
-        # d1_offset = Signal(4)
-        d1 = Signal(10)
-        d1_r = Signal(10)
+        d1_full = Signal(40)
+        d1 = Signal(20)
 
-        d2_full = Signal(20)
-        # d2_offset = Signal(4)
-        d2 = Signal(10)
-        d2_r = Signal(10)
+        d2_full = Signal(40)
+        d2 = Signal(20)
 
         m.d.shift += d0_full.eq(Cat(d0_full[xdr:], in_d0))
         m.d.shift += d1_full.eq(Cat(d1_full[xdr:], in_d1))
@@ -114,24 +108,48 @@ class DVID2VGA(Elaboratable):
             (d1, d1_full, d0_offset_shift),   # TODO: Individual phase alignment
             (d2, d2_full, d0_offset_shift)]:  # TODO: Individual phase alignment
             with m.Switch(sig_offset):
-                for i in range(10):
+                for i in range(20):
                     with m.Case(i):
-                        m.d.comb += sig.eq(sig_full[i:10+i])
-                with m.Case():
-                    m.d.comb += sig.eq(sig_full[0:10])
+                        m.d.comb += sig.eq(sig_full[i:20+i])
+                with m.Default():
+                    m.d.comb += sig.eq(sig_full[0:20])
 
-        # shift -> shift (this might be overkill)
+        d0_r = Signal(20)
+        d1_r = Signal(20)
+        d2_r = Signal(20)
+
+        cdc_ctr = Signal(4)
+        with m.If(cdc_ctr == 4):
+            # 4 * (4 + 1) = 20
+            m.d.shift += d0_r.eq(d0)
+            m.d.shift += d1_r.eq(d1)
+            m.d.shift += d2_r.eq(d2)
+            m.d.shift += cdc_ctr.eq(0)
+        with m.Else():
+            m.d.shift += cdc_ctr.eq(cdc_ctr + 1)
+
         d0_s = Signal(shape=d0.shape())
         d1_s = Signal(shape=d1.shape())
         d2_s = Signal(shape=d2.shape())
-        m.submodules += FFSynchronizer(d0, d0_s, stages=5)
-        m.submodules += FFSynchronizer(d1, d1_s, stages=5)
-        m.submodules += FFSynchronizer(d2, d2_s, stages=5)
 
-        # shift -> sync (10x !)
-        m.submodules += FFSynchronizer(d0_s, d0_r, stages=5)
-        m.submodules += FFSynchronizer(d1_s, d1_r, stages=5)
-        m.submodules += FFSynchronizer(d2_s, d2_r, stages=5)
+        d0_s_s = Signal(10)
+        d1_s_s = Signal(10)
+        d2_s_s = Signal(10)
+        latch_clock = Signal()
+        m.d.sync += latch_clock.eq(~latch_clock)
+        with m.If(latch_clock):
+            m.d.comb += d0_s_s.eq(d0_s[:10])
+            m.d.comb += d1_s_s.eq(d1_s[:10])
+            m.d.comb += d2_s_s.eq(d2_s[:10])
+        with m.Else():
+            m.d.sync += d0_s.eq(d0_r)
+            m.d.sync += d1_s.eq(d1_r)
+            m.d.sync += d2_s.eq(d2_r)
+
+            m.d.comb += d0_s_s.eq(d0_s[10:])
+            m.d.comb += d1_s_s.eq(d1_s[10:])
+            m.d.comb += d2_s_s.eq(d2_s[10:])
+
 
 
         # TODO: Handle data island
@@ -149,9 +167,9 @@ class DVID2VGA(Elaboratable):
         # with m.If(data_island & (d1_r == 0b0100110011) & (d2_r == 0b0100110011)):
         #     m.d.sync += data_island.eq(0)
 
-        m.submodules.tmds_dec_d0 = TMDSDecoder(d0_r, self.out_b, c0, de0)
-        m.submodules.tmds_dec_d1 = TMDSDecoder(d1_r, self.out_g, Cat(self.out_ctl0,  self.out_ctl1),  self.out_de1)
-        m.submodules.tmds_dec_d2 = TMDSDecoder(d2_r, self.out_r, Cat(self.out_ctl2,  self.out_ctl3),  self.out_de2)
+        m.submodules.tmds_dec_d0 = TMDSDecoder(d0_s_s, self.out_b, c0, de0)
+        m.submodules.tmds_dec_d1 = TMDSDecoder(d1_s_s, self.out_g, Cat(self.out_ctl0,  self.out_ctl1),  self.out_de1)
+        m.submodules.tmds_dec_d2 = TMDSDecoder(d2_s_s, self.out_r, Cat(self.out_ctl2,  self.out_ctl3),  self.out_de2)
 
         # Recover the start offset in the TMDS signal by searching for multiple
         # clock cycles of ~de0 (any control word on d0) in the pixel clock domain.
@@ -165,7 +183,7 @@ class DVID2VGA(Elaboratable):
         with m.If(d0_offset_ctr == 0):
             # No sync found in 4095 cycles. Slip one bit.
             m.d.sync += d0_offset_ctr.eq(2**12 - 1)
-            with m.If(d0_offset == 9):
+            with m.If(d0_offset == 19):
                 m.d.sync += d0_offset.eq(0)
             with m.Else():
                 m.d.sync += d0_offset.eq(d0_offset + 1)
