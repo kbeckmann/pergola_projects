@@ -67,7 +67,7 @@ class DVID2VGA(Elaboratable):
 
         self.xdr = xdr
 
-        self.d0_full = Signal(40)
+        self.d0_full = Signal(30)
         self.d0_offset = Signal(4)
         self.d0_offset_ctr = Signal(16, reset=2**12-1)
         self.d0 = Signal(20)
@@ -93,10 +93,10 @@ class DVID2VGA(Elaboratable):
         # sync -> shift domain
         d0_offset_shift = Signal(4)
 
-        d1_full = Signal(40)
+        d1_full = Signal(30)
         d1 = Signal(20)
 
-        d2_full = Signal(40)
+        d2_full = Signal(30)
         d2 = Signal(20)
 
         m.d.shift += d0_full.eq(Cat(d0_full[xdr:], in_d0))
@@ -108,7 +108,7 @@ class DVID2VGA(Elaboratable):
             (d1, d1_full, d0_offset_shift),   # TODO: Individual phase alignment
             (d2, d2_full, d0_offset_shift)]:  # TODO: Individual phase alignment
             with m.Switch(sig_offset):
-                for i in range(20):
+                for i in range(10):
                     with m.Case(i):
                         m.d.comb += sig.eq(sig_full[i:20+i])
                 with m.Default():
@@ -170,7 +170,7 @@ class DVID2VGA(Elaboratable):
         with m.If(d0_offset_ctr == 0):
             # No sync found in 4095 cycles. Slip one bit.
             m.d.sync += d0_offset_ctr.eq(2**12 - 1)
-            with m.If(d0_offset == 19):
+            with m.If(d0_offset == 9):
                 m.d.sync += d0_offset.eq(0)
             with m.Else():
                 m.d.sync += d0_offset.eq(d0_offset + 1)
@@ -335,11 +335,6 @@ class DVID2VGATest(FHDLTestCase):
                                     decoded_de0,
                                     decoded_hsync,
                                     decoded_vsync,
-                                    dvid2vga.d0_full,
-                                    dvid2vga.d0_offset,
-                                    dvid2vga.d0_offset_ctr,
-                                    dvid2vga.d0,
-                                    dvid2vga.d0_r
                                 ),
                                 black_boxes={"vga_phy": r"""
 attribute \cxxrtl_blackbox 1

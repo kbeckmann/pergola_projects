@@ -1,12 +1,9 @@
 from nmigen import *
-from nmigen.lib.cdc import *
 from nmigen.build import *
+from nmigen.back.pysim import Simulator, Active
 from .. import Applet
 from ...util.ecp5pll import ECP5PLL, ECP5PLLConfig
-from nmigen.back.pysim import Simulator, Active
 from ...util.test import FHDLTestCase
-# from ...util.cdc import SafeFFSynchronizer
-from ...gateware.tmds import TMDSEncoder, TMDSDecoder
 from ...gateware.dvid2vga import DVID2VGA
 from ...gateware.vga2dvid import VGA2DVID
 from ...gateware.vga import *
