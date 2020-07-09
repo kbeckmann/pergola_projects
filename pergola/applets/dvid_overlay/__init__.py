@@ -13,16 +13,24 @@ from ...gateware.vga import *
 from ...gateware.vga_testimage import *
 
 class DVIDOverlay(Elaboratable):
-    def __init__(self, dvid_in, dvid_out, dvid_clk_out, xdr, debug):
-        self.dvid_in = dvid_in
-        self.dvid_out = dvid_out
+    def __init__(self, dvid_in_d0, dvid_in_d1, dvid_in_d2, dvid_out_d0, dvid_out_d1, dvid_out_d2, dvid_clk_out, xdr, debug):
+        self.dvid_in_d0 = dvid_in_d0
+        self.dvid_in_d1 = dvid_in_d1
+        self.dvid_in_d2 = dvid_in_d2
+        self.dvid_out_d0 = dvid_out_d0
+        self.dvid_out_d1 = dvid_out_d1
+        self.dvid_out_d2 = dvid_out_d2
         self.dvid_clk_out = dvid_clk_out
         self.xdr = xdr
         self.debug = debug
 
     def elaborate(self, platform):
-        dvid_in = self.dvid_in
-        dvid_out = self.dvid_out
+        dvid_in_d0 = self.dvid_in_d0
+        dvid_in_d1 = self.dvid_in_d1
+        dvid_in_d2 = self.dvid_in_d2
+        dvid_out_d0 = self.dvid_out_d0
+        dvid_out_d1 = self.dvid_out_d1
+        dvid_out_d2 = self.dvid_out_d2
         dvid_clk_out = self.dvid_clk_out
         xdr = self.xdr
 
@@ -52,9 +60,9 @@ class DVIDOverlay(Elaboratable):
         decoded_ctl3 = Signal()
 
         m.submodules.dvid2vga = dvid2vga = DVID2VGA(
-            in_d0=self.dvid_in[0],
-            in_d1=self.dvid_in[1],
-            in_d2=self.dvid_in[2],
+            in_d0=self.dvid_in_d0,
+            in_d1=self.dvid_in_d1,
+            in_d2=self.dvid_in_d2,
 
             out_r=decoded_r,
             out_g=decoded_g,
@@ -76,7 +84,9 @@ class DVIDOverlay(Elaboratable):
         tmds_d1 = Signal(xdr)
         tmds_d2 = Signal(xdr)
 
-        m.d.comb += dvid_out.eq(Cat(tmds_d0, tmds_d1, tmds_d2))
+        m.d.comb += dvid_out_d0.eq(tmds_d0)
+        m.d.comb += dvid_out_d1.eq(tmds_d1)
+        m.d.comb += dvid_out_d2.eq(tmds_d2)
 
         vga_output = Record([
             ('hs', 1),
@@ -291,30 +301,49 @@ class DVIDOverlayApplet(Applet, applet_name="dvid-overlay"):
                      Attrs(IO_TYPE="LVDS")),
         ])
 
-        dvid_in = platform.request("pmod1_lvds", 0)
+        dvid_in = platform.request("pmod1_lvds", 0, xdr=xdr)
 
-        dvid_out = platform.request("pmod2_lvds", 0)
-        dvid_clk_out = platform.request("pmod2_lvds_clk", 0)
+        dvid_out = platform.request("pmod2_lvds", 0, xdr=xdr)
+        dvid_out_clk = platform.request("pmod2_lvds_clk", 0, xdr=xdr)
 
         m = Module()
 
         m.submodules.pll = pll = ECP5PLL([
-            ECP5PLLConfig("shift", (pixel_clk_freq / 1e6) * 10),
+            ECP5PLLConfig("shift", (pixel_clk_freq / 1e6) * 10.),
             ECP5PLLConfig("sync", pixel_clk_freq / 1e6),
         ], clock_signal_name="pmod1_lvds_clk")
 
 
         leds = Cat([platform.request("led", i) for i in range(8)])
 
-        dvid_in_tmp = Signal(3)
-        dvid_out_tmp = Signal(3)
+        dvid_in_d0 = Signal(xdr)
+        dvid_in_d1 = Signal(xdr)
+        dvid_in_d2 = Signal(xdr)
+        dvid_out_d0 = Signal(xdr)
+        dvid_out_d1 = Signal(xdr)
+        dvid_out_d2 = Signal(xdr)
+        dvid_out_clk_d = Signal(xdr)
         m.d.comb += [
-            dvid_in_tmp.eq(Cat(~dvid_in[0], dvid_in[1], ~dvid_in[2])),
-            dvid_out.eq(Cat(dvid_out_tmp[0], ~dvid_out_tmp[1], ~dvid_out_tmp[2])),
+            dvid_in.i_clk.eq(ClockSignal("shift")),
+            dvid_in_d0.eq(~dvid_in.i[0]),
+            dvid_in_d1.eq( dvid_in.i[1]),
+            dvid_in_d2.eq(~dvid_in.i[2]),
+
+            dvid_out.o_clk.eq(ClockSignal("shift")),
+            dvid_out.o.eq(Cat(dvid_out_d0[0], ~dvid_out_d1[0], ~dvid_out_d2[0])),
+
+            dvid_out_clk.o_clk.eq(ClockSignal("shift")),
+            dvid_out_clk.o.eq(Cat(dvid_out_clk_d))
         ]
-        m.submodules.overlay = DVIDOverlay(dvid_in_tmp, dvid_out_tmp, dvid_clk_out, xdr, leds)
-
-
-
+        m.submodules.overlay = DVIDOverlay(
+            dvid_in_d0, 
+            dvid_in_d1, 
+            dvid_in_d2, 
+            dvid_out_d0,
+            dvid_out_d1,
+            dvid_out_d2,
+            dvid_out_clk_d,
+            xdr,
+            leds)
 
         return m
