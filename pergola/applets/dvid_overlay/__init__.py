@@ -13,17 +13,18 @@ from ...gateware.vga import *
 from ...gateware.vga_testimage import *
 
 class DVIDOverlay(Elaboratable):
-    def __init__(self, dvid_in, dvid_out, dvid_clk_out, debug):
+    def __init__(self, dvid_in, dvid_out, dvid_clk_out, xdr, debug):
         self.dvid_in = dvid_in
         self.dvid_out = dvid_out
         self.dvid_clk_out = dvid_clk_out
+        self.xdr = xdr
         self.debug = debug
 
     def elaborate(self, platform):
         dvid_in = self.dvid_in
         dvid_out = self.dvid_out
         dvid_clk_out = self.dvid_clk_out
-        xdr = 1
+        xdr = self.xdr
 
         m = Module()
         
@@ -97,17 +98,28 @@ class DVIDOverlay(Elaboratable):
                 ),
         }
 
-        m.submodules.vga = VGAOutputSubtarget(
+        m.submodules.vga = vga = DynamicVGAOutputSubtarget(
             output=vga_output,
-            vga_parameters=vga_configs["640x480p60"],
         )
 
+        # m.d.sync += vga.h_front.eq(0)
+        # m.d.sync += vga.h_sync.eq(96)
+        # m.d.sync += vga.h_back.eq(48+16)
+        m.d.sync += vga.h_sync.eq(96 + 48 + 16)
+        m.d.sync += vga.h_active.eq(640)
+        # m.d.sync += vga.v_front.eq(10)
+        # m.d.sync += vga.v_sync.eq(2)
+        # m.d.sync += vga.v_back.eq(33)
+        m.d.sync += vga.v_sync.eq(10+2+33)
+        m.d.sync += vga.v_active.eq(480)
+
+        # Count and detect h_sync and v_sync lengths
         ctr = Signal(16, reset=0)
         with m.If(~decoded_de0):
             m.d.sync += ctr.eq(ctr + 1)
         with m.Else():
             m.d.sync += ctr.eq(0)
-            with m.If(ctr > 20000):
+            with m.If(ctr > 10000):
                 # First data enabled after vsync
                 m.d.sync += m.submodules.vga.reset.eq(1)
 
@@ -168,15 +180,15 @@ class DVIDOverlay(Elaboratable):
             in_r=overlay_r,
             in_g=overlay_g,
             in_b=overlay_b,
-            in_blank=~decoded_de0,
-            in_hsync=decoded_hsync,
-            in_vsync=decoded_vsync,
+            # in_blank=~decoded_de0,
+            # in_hsync=decoded_hsync,
+            # in_vsync=decoded_vsync,
             # in_blank = ~(decoded_hsync | decoded_vsync),
-            # in_blank = vga_output.blank,
+            in_blank = vga_output.blank,
             # in_hsync = vga_output.hs,
             # in_vsync = vga_output.vs,
-            # in_hsync = 0,
-            # in_vsync = 0,
+            in_hsync = 0,
+            in_vsync = 0,
             in_c1=Cat(decoded_ctl0, decoded_ctl1),
             in_c2=Cat(decoded_ctl2, decoded_ctl3),
 
@@ -264,6 +276,7 @@ class DVIDOverlayApplet(Applet, applet_name="dvid-overlay"):
         # D2  G2/F1 (r)  inverted
 
         pixel_clk_freq = 25e6
+        xdr = 1
 
         platform.add_resources([
             Resource("pmod1_lvds", 0, Pins("J1 L1 N1", dir="i"),
@@ -299,7 +312,7 @@ class DVIDOverlayApplet(Applet, applet_name="dvid-overlay"):
             dvid_in_tmp.eq(Cat(~dvid_in[0], dvid_in[1], ~dvid_in[2])),
             dvid_out.eq(Cat(dvid_out_tmp[0], ~dvid_out_tmp[1], ~dvid_out_tmp[2])),
         ]
-        m.submodules.overlay = DVIDOverlay(dvid_in_tmp, dvid_out_tmp, dvid_clk_out, leds)
+        m.submodules.overlay = DVIDOverlay(dvid_in_tmp, dvid_out_tmp, dvid_clk_out, xdr, leds)
 
 
 
