@@ -152,22 +152,9 @@ class DVID2VGA(Elaboratable):
 
 
 
-        # TODO: Handle data island
-        c0 = Signal(2)
-        de0 = Signal()
-        m.d.comb += [
-            self.out_hsync.eq(Mux(data_island, 0, c0[0])),
-            self.out_vsync.eq(Mux(data_island, 0, c0[1])),
-            self.out_de0.eq(Mux(data_island, 0, de0)),
-        ]
+        # TODO: Handle HDMI data island
 
-        # with m.If((self.out_de1 & self.out_de2) & self.out_ctl0 & ~self.out_ctl1 & self.out_ctl2 & ~self.out_ctl3):
-        #     m.d.sync += data_island.eq(1)
-
-        # with m.If(data_island & (d1_r == 0b0100110011) & (d2_r == 0b0100110011)):
-        #     m.d.sync += data_island.eq(0)
-
-        m.submodules.tmds_dec_d0 = TMDSDecoder(d0_s_s, self.out_b, c0, de0)
+        m.submodules.tmds_dec_d0 = TMDSDecoder(d0_s_s, self.out_b, Cat(self.out_hsync, self.out_vsync), self.out_de0)
         m.submodules.tmds_dec_d1 = TMDSDecoder(d1_s_s, self.out_g, Cat(self.out_ctl0,  self.out_ctl1),  self.out_de1)
         m.submodules.tmds_dec_d2 = TMDSDecoder(d2_s_s, self.out_r, Cat(self.out_ctl2,  self.out_ctl3),  self.out_de2)
 
