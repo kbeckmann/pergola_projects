@@ -120,10 +120,18 @@ class DVID2VGA(Elaboratable):
                 with m.Case():
                     m.d.comb += sig.eq(sig_full[0:10])
 
+        # shift -> shift (this might be overkill)
+        d0_s = Signal(shape=d0.shape())
+        d1_s = Signal(shape=d1.shape())
+        d2_s = Signal(shape=d2.shape())
+        m.submodules += FFSynchronizer(d0, d0_s, stages=5)
+        m.submodules += FFSynchronizer(d1, d1_s, stages=5)
+        m.submodules += FFSynchronizer(d2, d2_s, stages=5)
+
         # shift -> sync (10x !)
-        m.submodules += FFSynchronizer(d0, d0_r)
-        m.submodules += FFSynchronizer(d1, d1_r)
-        m.submodules += FFSynchronizer(d2, d2_r)
+        m.submodules += FFSynchronizer(d0_s, d0_r, stages=5)
+        m.submodules += FFSynchronizer(d1_s, d1_r, stages=5)
+        m.submodules += FFSynchronizer(d2_s, d2_r, stages=5)
 
 
         # TODO: Handle data island
@@ -145,13 +153,13 @@ class DVID2VGA(Elaboratable):
         m.submodules.tmds_dec_d1 = TMDSDecoder(d1_r, self.out_g, Cat(self.out_ctl0,  self.out_ctl1),  self.out_de1)
         m.submodules.tmds_dec_d2 = TMDSDecoder(d2_r, self.out_r, Cat(self.out_ctl2,  self.out_ctl3),  self.out_de2)
 
-        # Recover the signal by searching for two (pixel-)clock cycles
-        # of ~de0 (any sync word on d0)
-        de0_r = Signal()
-        m.d.sync += de0_r.eq(self.out_de0)
+        # Recover the start offset in the TMDS signal by searching for multiple
+        # clock cycles of ~de0 (any control word on d0) in the pixel clock domain.
+        de0_r = Signal(8)
+        m.d.sync += de0_r.eq(Cat(de0_r[1:], self.out_de0))
         with m.If(self.out_de0):
             m.d.sync += d0_offset_ctr.eq(d0_offset_ctr - 1)
-        with m.Elif(~de0_r & ~self.out_de0):
+        with m.Elif(de0_r == 0):
             m.d.sync += d0_offset_ctr.eq(2**12 - 1)
 
         with m.If(d0_offset_ctr == 0):
