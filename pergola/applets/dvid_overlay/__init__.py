@@ -131,7 +131,8 @@ class DVIDOverlay(Elaboratable):
             m.d.sync += ctr.eq(0)
             with m.If(ctr > 10000):
                 # First data enabled after vsync
-                m.d.sync += m.submodules.vga.reset.eq(1)
+                # m.d.sync += m.submodules.vga.reset.eq(1)
+                m.d.sync += m.submodules.vga.reset.eq(0)
 
         # Generate vga test image
         secondary_r = Signal(8)
@@ -152,17 +153,17 @@ class DVIDOverlay(Elaboratable):
         overlay_r = Signal(8)
         overlay_g = Signal(8)
         overlay_b = Signal(8)
-        # m.d.comb += [
-        #     overlay_r.eq(decoded_r),
-        #     overlay_g.eq(decoded_g),
-        #     overlay_b.eq(decoded_b),
-        # ]
-
         m.d.comb += [
-            overlay_r.eq((decoded_r >> 1) + (secondary_r >> 1)),
-            overlay_g.eq((decoded_g >> 1) + (secondary_g >> 1)),
-            overlay_b.eq((decoded_b >> 1) + (secondary_b >> 1)),
+            overlay_r.eq(decoded_r),
+            overlay_g.eq(decoded_g),
+            overlay_b.eq(decoded_b),
         ]
+
+        # m.d.comb += [
+        #     overlay_r.eq((decoded_r >> 1) + (secondary_r >> 1)),
+        #     overlay_g.eq((decoded_g >> 1) + (secondary_g >> 1)),
+        #     overlay_b.eq((decoded_b >> 1) + (secondary_b >> 1)),
+        # ]
 
         # m.d.comb += [
         #     overlay_r.eq(secondary_r),
@@ -183,6 +184,10 @@ class DVIDOverlay(Elaboratable):
         # ]
 
 
+        # Delay the blanking signal 1
+        blank_r = Signal()
+        m.d.sync += blank_r.eq(~decoded_de0)
+
         m.submodules.vga2dvid = vga2dvid = VGA2DVID(
             # in_r=Const(127, 8),
             # in_g=Const(63, 8),
@@ -190,15 +195,15 @@ class DVIDOverlay(Elaboratable):
             in_r=overlay_r,
             in_g=overlay_g,
             in_b=overlay_b,
-            # in_blank=~decoded_de0,
-            # in_hsync=decoded_hsync,
-            # in_vsync=decoded_vsync,
+            in_blank=blank_r,
+            in_hsync=decoded_hsync,
+            in_vsync=decoded_vsync,
             # in_blank = ~(decoded_hsync | decoded_vsync),
-            in_blank = vga_output.blank,
+            # in_blank = vga_output.blank,
             # in_hsync = vga_output.hs,
             # in_vsync = vga_output.vs,
-            in_hsync = 0,
-            in_vsync = 0,
+            # in_hsync = 0,
+            # in_vsync = 0,
             in_c1=Cat(decoded_ctl0, decoded_ctl1),
             in_c2=Cat(decoded_ctl2, decoded_ctl3),
 
