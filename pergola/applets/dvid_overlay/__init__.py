@@ -137,8 +137,8 @@ class DVIDOverlay(Elaboratable):
 
         m.submodules.vga = vga = VGAOutputSubtarget(
             # vga_parameters=vga_configs["640x480p60"],
-            vga_parameters=vga_configs["1280x720p60"],
-            # vga_parameters=vga_configs["1920x1080p60"],
+            # vga_parameters=vga_configs["1280x720p60"],
+            vga_parameters=vga_configs["1920x1080p60"],
             output=vga_output,
         )
 
@@ -159,7 +159,7 @@ class DVIDOverlay(Elaboratable):
             m.d.sync += ctr.eq(ctr + 1)
         with m.Else():
             m.d.sync += ctr.eq(0)
-            with m.If(ctr > 1000):
+            with m.If(ctr > 10000):
                 # First data enabled after vsync
                 m.d.sync += m.submodules.vga.reset.eq(1)
                 # m.d.sync += m.submodules.vga.reset.eq(0)
@@ -321,9 +321,10 @@ class DVIDOverlayApplet(Applet, applet_name="dvid-overlay"):
         # D2  G2/F1 (r)  inverted
 
         # pixel_freq_mhz = 75
-        pixel_freq_mhz = 25
+        # pixel_freq_mhz = 25
         # pixel_freq_mhz = 100
-        xdr = 2
+        pixel_freq_mhz = 150
+        xdr = 4
 
         platform.add_resources([
             Resource("pmod1_lvds", 0, Pins("J1 L1 N1", dir="i"),
@@ -356,11 +357,34 @@ class DVIDOverlayApplet(Applet, applet_name="dvid-overlay"):
                 ECP5PLLConfig("sync", pixel_freq_mhz),
             ]
         elif xdr == 4:
-            pll_config = [
-                ECP5PLLConfig("shift_fast", pixel_freq_mhz * 10. / 2.),
-                ECP5PLLConfig("shift", pixel_freq_mhz * 10. / 2. / 2.),
-                ECP5PLLConfig("sync", pixel_freq_mhz),
-            ]
+            if False:
+                pll_config = [
+                    ECP5PLLConfig("shift_fast", pixel_freq_mhz * 10. / 2.),
+                    ECP5PLLConfig("shift", pixel_freq_mhz * 10. / 2. / 2.),
+                    ECP5PLLConfig("sync", pixel_freq_mhz),
+                ]
+            else:
+                pll_config = [
+                    ECP5PLLConfig("shift_fast_raw", pixel_freq_mhz * 10 / 2),
+                    ECP5PLLConfig("sync", pixel_freq_mhz),
+                ]
+
+                m.domains += ClockDomain("shift_fast")
+                m.submodules.eclksyncb = Instance("ECLKSYNCB",
+                    i_ECLKI=ClockSignal("shift_fast_raw"),
+                    o_ECLKO=ClockSignal(domain="shift_fast"),
+                )
+
+                m.domains += ClockDomain("shift")
+                m.submodules.clkdiv = Instance("CLKDIVF",
+                    i_CLKI=ClockSignal("shift_fast"),
+                    i_RST=0,
+                    i_ALIGNWD=0,
+
+                    o_CDIVX=ClockSignal(domain="shift"),
+
+                    p_DIV=2.0
+                )
 
         m.submodules.pll2 = ECP5PLL(
             pll_config,
