@@ -54,21 +54,6 @@ class PergolaPlatform(LatticeECP5Platform):
         Connector("pmod", 4, "F16 G16 J16 L16      G15 H15 J15 L15"), # PMOD5
     ]
 
-    @property
-    def file_templates(self):
-        idcodes = {
-            "LFE5U-12F": "0x21111043",
-            "LFE5U-25F": "0x41111043",
-            "LFE5U-45F": "0x41112043",
-            "LFE5U-85F": "0x41113043",
-        }
-        return {
-            **super().file_templates,
-            "{{name}}-openocd.cfg": """
-            jtag newtap ecp5 tap -irlen 8 -expected-id {} ;
-            """.format(idcodes[self.device])
-        }
-
     def toolchain_program(self, products, name):
         openocd = os.environ.get("OPENOCD", "openocd")
         interface = os.environ.get("INTERFACE", "/dev/ttyACM0")
@@ -104,13 +89,24 @@ class PergolaPlatform(LatticeECP5Platform):
                 sleep 1;
                 """.format(interface, interface, bitstream, interface, bitstream, interface)]))
                 #   kill $CATPID || true;
-        else:
+        elif interface == "h2":
             with products.extract("{}.bit".format(name)) as (bitstream):
                 print(subprocess.check_call([
                     "hf2", "-v", "0x239a", "-p", "0x0058", "flash",
                     "--file", bitstream, "--address", "0x70000000", "-s"
                 ]))
+        else:
+            """ Programs the board using the Apollo firmware """
 
+            from luna.apollo import ApolloDebugger
+            from luna.apollo.ecp5 import ECP5_JTAGProgrammer
 
-    def build(self, *args, **kwargs):
-        LatticeECP5Platform.build(self, *args, **kwargs)
+            # Create our connection to the debug module.
+            debugger = ApolloDebugger()
+
+            # Grab our generated bitstream, and upload it to the FPGA.
+            bitstream =  products.get("{}.bit".format(name))
+            with debugger.jtag as jtag:
+                programmer = ECP5_JTAGProgrammer(jtag)
+                programmer.configure(bitstream)
+
