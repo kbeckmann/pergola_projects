@@ -32,14 +32,17 @@ class UARTApplet(Applet, applet_name="uart"):
         leds = [platform.request("led", i) for i in range(8)]
         btn = platform.request("button", 0)
 
-        platform.add_resources([
-            UARTResource("pmod1_uart", 0,
-                rx="L1", tx="P2",
-                attrs=Attrs(IO_TYPE="LVCMOS33", PULLUP=1)
-            ),
-        ])
+        # Uncomment to use pmod1 instead
 
-        uart_pins = platform.request("pmod1_uart", 0)
+        # platform.add_resources([
+        #     UARTResource("pmod1_uart", 0,
+        #         rx="L1", tx="P2",
+        #         attrs=Attrs(IO_TYPE="LVCMOS33", PULLUP=1)
+        #     ),
+        # ])
+
+        # uart_pins = platform.request("pmod1_uart", 0)
+        uart_pins = platform.request("uart", 0)
 
         m = Module()
 
