@@ -109,6 +109,8 @@ class DVIDSignalGeneratorXDR(Elaboratable):
             in_blank = vga_output.blank,
             in_hsync = vga_output.hs,
             in_vsync = vga_output.vs,
+            in_c1 = Const(0, 2),
+            in_c2 = Const(0, 2),
             out_r = pixel_r,
             out_g = pixel_g,
             out_b = pixel_b,
