@@ -68,11 +68,9 @@ class PergolaPlatform(LatticeECP5Platform):
             elif interface == "busblaster":
                 args = ["-f", "interface/ftdi/dp_busblaster.cfg"]
 
-            with products.extract("{}-openocd.cfg".format(name), "{}.svf".format(name)) \
-                    as (config_filename, vector_filename):
+            with products.extract("{}.svf".format(name)) as vector_filename:
                 subprocess.check_call([openocd,
                     *args,
-                    "-f", config_filename,
                     "-c", "transport select jtag; adapter_khz 10000; init; svf -quiet {}; exit".format(vector_filename)
                 ])
         elif interface == "pergola_bringup":
