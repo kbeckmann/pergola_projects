@@ -529,8 +529,7 @@ int main(int argc, char *argv[])
             f.close()
 
         print(subprocess.check_call([
-            # "clang++", "-I", "/usr/share/yosys/include",
-            "clang++", "-I", "/home/konrad/dev/yosys",
+            "clang++", "-I", "/usr/share/yosys/include",
             "-ggdb", "-O3", "-fno-exceptions", "-std=c++11", "-lSDL2", "-o", elfname, filename]))
 
         print(subprocess.check_call([elfname, "build/top.vcd"]))
