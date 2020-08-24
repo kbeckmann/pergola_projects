@@ -30,13 +30,13 @@ class PergolaPlatform(LatticeECP5Platform):
 
         # PSRAM #1
         *SPIFlashResources(0,
-            cs="A9", clk="B9", mosi="B10", miso="A10", wp="A11", hold="B8",
+            cs="A9", clk="B9", copi="B10", cipo="A10", wp="A11", hold="B8",
             attrs=Attrs(IO_TYPE="LVCMOS33")
         ),
 
         # PSRAM #2
         *SPIFlashResources(1,
-            cs="A2", clk="A4", mosi="A5", miso="B3", wp="B4", hold="A3",
+            cs="A2", clk="A4", copi="A5", cipo="B3", wp="B4", hold="A3",
             attrs=Attrs(IO_TYPE="LVCMOS33")
         ),
 
