@@ -1,7 +1,6 @@
 import logging
 import argparse
 from argparse import RawTextHelpFormatter
-from nmigen.back.pysim import Simulator
 from .applets import *
 from .platform.pergola import PergolaPlatform
 
