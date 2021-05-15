@@ -209,6 +209,17 @@ class DVIDParameters():
             self.pixel_freq_mhz)
 
 dvid_configs = {
+    "320x240p60": DVIDParameters(VGAParameters(
+            h_front=8,
+            h_sync=32,
+            h_back=80,
+            h_active=480,
+            v_front=3,
+            v_sync=6,
+            v_back=6,
+            v_active=360,
+        ), 100, 25),
+
     "640x480p60": DVIDParameters(VGAParameters(
             h_front=16,
             h_sync=96,
@@ -591,6 +602,9 @@ struct sdl_vga_phy : public cxxrtl_design::bb_p_vga__phy {
     std::vector<uint8_t> pixels;
     size_t beamAt = 0;
     size_t frames = 0;
+
+    void reset() {
+    }
 
     bool init(std::string name, unsigned width, unsigned height) {
         if (SDL_Init(SDL_INIT_VIDEO) != 0)
