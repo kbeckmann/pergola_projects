@@ -7,9 +7,10 @@ class AccessFlags(IntEnum):
 
 class BusWrapper(Elaboratable):
 
-    def __init__(self, address_width=8, io_width=32, signals_rw=[], signals_r=[], signals_w=[]):
+    def __init__(self, address_width=8, io_width=32, alignment=1, signals_rw=[], signals_r=[], signals_w=[]):
         self.address_width = address_width
         self.io_width = io_width
+        self.alignment = alignment
 
         self.cs         = Signal()
         self.we         = Signal()
@@ -44,7 +45,7 @@ class BusWrapper(Elaboratable):
                 offset += self.add_endpoints(flags, v, start + offset)
             else:
                 endpoints.update({start + offset : v})
-                offset += 1
+                offset += self.alignment
         return offset
 
     def __repr__(self):
