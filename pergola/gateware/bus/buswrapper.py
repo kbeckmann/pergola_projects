@@ -7,7 +7,7 @@ class AccessFlags(IntEnum):
 
 class BusWrapper(Elaboratable):
 
-    def __init__(self, address_width=8, io_width=32, signals_r=[], signals_w=[]):
+    def __init__(self, address_width=8, io_width=32, signals_rw=[], signals_r=[], signals_w=[]):
         self.address_width = address_width
         self.io_width = io_width
 
@@ -19,6 +19,11 @@ class BusWrapper(Elaboratable):
 
         self.endpoints_r = dict()
         self.endpoints_w = dict()
+
+        # Add RW to both
+        self.add_endpoints(AccessFlags.R, signals_rw)
+        self.add_endpoints(AccessFlags.W, signals_rw)
+
         self.add_endpoints(AccessFlags.R, signals_r)
         self.add_endpoints(AccessFlags.W, signals_w)
 
