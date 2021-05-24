@@ -1,4 +1,5 @@
 from nmigen import *
+from nmigen.lib.cdc import ResetSynchronizer
 from sys import float_info
 from math import fabs
 
@@ -197,7 +198,7 @@ class ECP5PLL(Elaboratable):
         for cfg in self.clock_config:
             m.domains += ClockDomain(cfg.cd_name)
             m.d.comb += ClockSignal(domain=cfg.cd_name).eq(self.clk[cfg.cd_name])
-            m.d.comb += ResetSignal(cfg.cd_name).eq(~self._pll_lock),
+            m.submodules += ResetSynchronizer(~self._pll_lock, domain=cfg.cd_name)
 
         # Grab our input clock
         clock_name = self.clock_name if self.clock_name else platform.default_clk
