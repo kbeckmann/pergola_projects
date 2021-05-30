@@ -9,7 +9,7 @@ from nmigen.build.dsl import *
 from .. import Applet
 from ...gateware.vga import VGAOutput, VGAOutputSubtarget, VGAParameters
 from ...gateware.vga2dvid import VGA2DVID
-from ...gateware.vga_testimage import TestImageGenerator
+from ...gateware.vga_testimage import TestImageGenerator, RotozoomImageGenerator
 from ...util.ecp5pll import ECP5PLL, ECP5PLLConfig
 
 
@@ -128,13 +128,15 @@ class DVIDSignalGeneratorXDR(Elaboratable):
             xdr=xdr
         )
 
-        m.submodules += TestImageGenerator(
+        m.submodules += RotozoomImageGenerator(
             vsync=vga_output.vs,
             h_ctr=m.submodules.vga.h_ctr,
             v_ctr=m.submodules.vga.v_ctr,
             r=r,
             g=g,
-            b=b)
+            b=b,
+            width=self.vga_parameters.h_active,
+            height=self.vga_parameters.v_active)
 
         # Store output bits in separate registers
         #
