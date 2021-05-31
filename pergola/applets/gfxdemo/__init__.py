@@ -187,15 +187,17 @@ class GFXDemo(Elaboratable):
     sync:   25 MHz
     shift: 125 MHz
     '''
-    def __init__(self, dvid_out, dvid_out_clk, vga_parameters, xdr, emulate_ddr, base_addr=0x3000_0000):
+    def __init__(self, dvid_out, dvid_out_clk, pdm_out, vga_parameters, xdr, emulate_ddr, base_addr=0x3000_0000):
         self.dvid_out = dvid_out
         self.dvid_out_clk = dvid_out_clk
+        self.pdm_out = pdm_out
         self.vga_parameters = vga_parameters
         self.xdr = xdr
         self.emulate_ddr = emulate_ddr
         self.base_addr = base_addr
 
         self.irq = Signal(2)
+        self.pdm_in = Signal(16)
 
         addr_width = 32
         data_width = 32
@@ -221,6 +223,11 @@ class GFXDemo(Elaboratable):
 
         m = Module()
 
+        # First order "sigma-delta"
+        pdm = Signal(len(self.pdm_in) + 1)
+        m.d.sync += pdm.eq(pdm[:-1] + self.pdm_in)
+        m.d.comb += self.pdm_out.eq(pdm[-1])
+
         m.submodules.dvid_signal_generator = dvid = DVIDSignalGeneratorXDR(
             dvid_out_clk=self.dvid_out_clk,
             dvid_out=self.dvid_out,
@@ -236,10 +243,13 @@ class GFXDemo(Elaboratable):
 
         m.submodules.wrapper = wrapper = BusWrapper(
             #signals_rw=[rw0, rw1, rw2, rw3],
-            signals_w=[dvid.intensity],
+            signals_w=[
+                dvid.intensity,
+                self.pdm_in,
+            ],
         )
 
-        print(wrapper)
+        # print(wrapper)
 
         m.d.comb += wrapper.cs.eq(0)
         m.d.comb += wrapper.we.eq(wb.we)
@@ -338,6 +348,8 @@ class GFXDemoApplet(Applet, applet_name="gfxdemo"):
         dvid_out = platform.request("pmod2", 0, xdr=0)
         dvid_out_neg = platform.request("pmod2_neg", 0, xdr=0)
 
+        pmod1 = platform.request("pmod", dir="o")
+
         m.d.comb += [
             dvid_out_clk_neg.eq(~dvid_out_clk),
             dvid_out_neg.eq(~dvid_out),
@@ -346,6 +358,7 @@ class GFXDemoApplet(Applet, applet_name="gfxdemo"):
         m.submodules.gfxdemo = gfxdemo = GFXDemo(
             dvid_out=dvid_out,
             dvid_out_clk=dvid_out_clk,
+            pdm_out=pmod1,
             vga_parameters=dvid_config.vga_parameters,
             xdr=xdr,
             emulate_ddr=True)
@@ -354,16 +367,22 @@ class GFXDemoApplet(Applet, applet_name="gfxdemo"):
             bus=gfxdemo.wb,
             irq=gfxdemo.irq,
             program=[
-                Asm.WFI(0b11),
-                *[Asm.WRITE(0x3000_0000, 255 if i&1 else 0) for i in range(640//4)],
                 Asm.WFI(0b01),
-                *[Asm.WRITE(0x3000_0000, 255 if i&1 else 0) for i in range(640//4)],
+                Asm.WRITE(0x3000_0000 + 4, 0xffff),
                 Asm.WFI(0b01),
-                *[Asm.WRITE(0x3000_0000, 255 if i&1 else 0) for i in range(640//4)],
-                Asm.WFI(0b01),
-                *[Asm.WRITE(0x3000_0000, 255 if i&1 else 0) for i in range(640//4)],
-                Asm.WRITE(0x3000_0000, 255),
+                Asm.WRITE(0x3000_0000 + 4, 0x0),
                 Asm.JMP(0),
+
+                # Asm.WFI(0b11),
+                # *[Asm.WRITE(0x3000_0000, 255 if i&1 else 0) for i in range(640//3)],
+                # Asm.WFI(0b01),
+                # *[Asm.WRITE(0x3000_0000, 255 if i&1 else 0) for i in range(640//3)],
+                # Asm.WFI(0b01),
+                # *[Asm.WRITE(0x3000_0000, 255 if i&1 else 0) for i in range(640//3)],
+                # Asm.WFI(0b01),
+                # *[Asm.WRITE(0x3000_0000, 255 if i&1 else 0) for i in range(640//3)],
+                # Asm.WRITE(0x3000_0000, 127),
+                # Asm.JMP(0),
             ]
         )
 
