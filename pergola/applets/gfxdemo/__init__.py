@@ -6,81 +6,34 @@ from nmigen.test.utils import FHDLTestCase
 from nmigen.asserts import *
 from nmigen.build.dsl import *
 
+from nmigen.hdl.rec import Direction
+
 from .. import Applet
+from ...gateware.bus.buswrapper import BusWrapper
 from ...gateware.vga import VGAOutput, VGAOutputSubtarget, VGAParameters
 from ...gateware.vga2dvid import VGA2DVID
+from ...gateware.vga_testimage import TestImageGenerator, RotozoomImageGenerator
 from ...gateware.gameoflife import GameOfLifeGenerator
 from ...util.ecp5pll import ECP5PLL, ECP5PLLConfig
 
+from ...gateware.bus.buscontroller import Asm, BusController
 
 class DVIDSignalGeneratorXDR(Elaboratable):
-    def __init__(self, dvid_out_clk, dvid_out, vga_parameters, pll1_freq_mhz, pixel_freq_mhz, xdr=1, skip_pll_checks=False, invert_outputs=[0, 0, 0, 0]):
+    def __init__(self, dvid_out_clk, dvid_out, vga_parameters, xdr=1, emulate_ddr=False, invert_outputs=[0, 0, 0, 0]):
         self.dvid_out_clk = dvid_out_clk
         self.dvid_out = dvid_out
         self.vga_parameters = vga_parameters
-        self.pll1_freq_mhz = pll1_freq_mhz
-        self.pixel_freq_mhz = pixel_freq_mhz
         self.xdr = xdr
-        self.skip_pll_checks = skip_pll_checks
+        self.emulate_ddr = emulate_ddr
         self.invert_outputs = invert_outputs
+        self.intensity = Signal(8, reset=0xff)
+        self.irq = Signal(2)
 
     def elaborate(self, platform):
         m = Module()
 
         xdr = self.xdr
-
-        m.submodules.pll1 = ECP5PLL([
-            ECP5PLLConfig("clk_pll1", self.pll1_freq_mhz),
-        ], skip_checks=self.skip_pll_checks)
-
-        if xdr == 1:
-            pll_config = [
-                ECP5PLLConfig("shift", self.pixel_freq_mhz * 10),
-                ECP5PLLConfig("sync", self.pixel_freq_mhz),
-            ]
-        elif xdr == 2:
-            pll_config = [
-                ECP5PLLConfig("shift", self.pixel_freq_mhz * 10 / 2),
-                ECP5PLLConfig("sync", self.pixel_freq_mhz),
-            ]
-        elif xdr == 4:
-            if True:
-                pll_config = [
-                    ECP5PLLConfig("shift_fast", self.pixel_freq_mhz * 10 / 2),
-                    ECP5PLLConfig("shift", self.pixel_freq_mhz * 10 / 2 / 2),
-                    ECP5PLLConfig("sync", self.pixel_freq_mhz),
-                ]
-            else:
-                # Generate sclk(shift) from fclk(shift_fast)
-                # This unfortunately reduces timing of the shift_fast from 400 to 350 MHz or so
-                pll_config = [
-                    ECP5PLLConfig("shift_fast", self.pixel_freq_mhz * 10 / 2),
-                    ECP5PLLConfig("sync", self.pixel_freq_mhz),
-                ]
-                shift_clk = Signal()
-                m.domains += ClockDomain("shift")
-                m.submodules.clkdiv2 = Instance("CLKDIVF",
-                    i_CLKI=ClockSignal("shift_fast"),
-                    i_RST=0,
-                    i_ALIGNWD=0,
-
-                    o_CDIVX=ClockSignal(domain="shift"),
-
-                    p_DIV=2.0
-                )
-        elif xdr == 7:
-            if True:
-                pll_config = [
-                    ECP5PLLConfig("shift_fast", self.pixel_freq_mhz * 10 / 2),
-                    ECP5PLLConfig("shift", self.pixel_freq_mhz * 10 / 2. / 3.5),
-                    ECP5PLLConfig("sync", self.pixel_freq_mhz),
-                ]
-
-        m.submodules.pll2 = ECP5PLL(
-            pll_config,
-            clock_signal_name="clk_pll1",
-            clock_signal_freq=self.pll1_freq_mhz * 1e6,
-            skip_checks=self.skip_pll_checks)
+        emulate_ddr = self.emulate_ddr
 
         vga_output = Record([
             ('hs', 1),
@@ -102,13 +55,14 @@ class DVIDSignalGeneratorXDR(Elaboratable):
             vga_parameters=self.vga_parameters,
         )
 
-        blank_r = Signal(2)
-        hs_r = Signal(2)
-        vs_r = Signal(2)
+        delay_cycles = 4
+        blank_r = Signal(delay_cycles)
+        hs_r = Signal(delay_cycles)
+        vs_r = Signal(delay_cycles)
         m.d.sync += [
-            blank_r.eq(Cat(blank_r[1], vga_output.blank)),
-            hs_r.eq(   Cat(hs_r[1],    vga_output.hs)),
-            vs_r.eq(   Cat(vs_r[1],    vga_output.vs)),
+            blank_r.eq(Cat(blank_r[1:], vga_output.blank)),
+            hs_r.eq(   Cat(hs_r[1:],    vga_output.hs)),
+            vs_r.eq(   Cat(vs_r[1:],    vga_output.vs)),
         ]
 
         m.submodules.vga2dvid = VGA2DVID(
@@ -127,13 +81,22 @@ class DVIDSignalGeneratorXDR(Elaboratable):
             xdr=xdr
         )
 
-        m.submodules += GameOfLifeGenerator(
+
+        m.submodules.rotozoom = rotozoom = RotozoomImageGenerator(
             vsync=vga_output.vs,
-            vga=m.submodules.vga,
+            h_ctr=m.submodules.vga.h_ctr,
+            v_ctr=m.submodules.vga.v_ctr,
             r=r,
             g=g,
             b=b,
-        )
+            width=self.vga_parameters.h_active,
+            height=self.vga_parameters.v_active)
+        m.d.comb += rotozoom.intensity.eq(self.intensity)
+        m.d.comb += self.irq.eq(Cat(
+            (m.submodules.vga.h_ctr == 0),
+            (m.submodules.vga.v_ctr == 0)
+        ))
+
 
         # Store output bits in separate registers
         #
@@ -142,64 +105,39 @@ class DVIDSignalGeneratorXDR(Elaboratable):
         pixel_r_r = Signal(xdr)
         pixel_g_r = Signal(xdr)
         pixel_b_r = Signal(xdr)
-        invert_outputs = self.invert_outputs
-        m.d.shift += pixel_clk_r.eq(~pixel_clk if invert_outputs[0] else pixel_clk)
-        m.d.shift += pixel_r_r  .eq(~pixel_r   if invert_outputs[3] else pixel_r)
-        m.d.shift += pixel_g_r  .eq(~pixel_g   if invert_outputs[2] else pixel_g)
-        m.d.shift += pixel_b_r  .eq(~pixel_b   if invert_outputs[1] else pixel_b)
+        m.d.shift += pixel_clk_r.eq(pixel_clk)
+        m.d.shift += pixel_r_r.eq(pixel_r)
+        m.d.shift += pixel_g_r.eq(pixel_g)
+        m.d.shift += pixel_b_r.eq(pixel_b)
 
         if xdr == 1:
             m.d.comb += [
                 self.dvid_out_clk.eq(pixel_clk_r[0]),
                 self.dvid_out.eq(Cat(pixel_b_r[0], pixel_g_r[0], pixel_r_r[0])),
             ]
-        elif xdr == 2:
+        elif xdr == 2 and emulate_ddr == True:
             m.d.comb += [
-                self.dvid_out_clk.o_clk.eq(ClockSignal("shift")),
-                self.dvid_out_clk.o0.eq(pixel_clk_r[0]),
-                self.dvid_out_clk.o1.eq(pixel_clk_r[1]),
+                self.dvid_out_clk.eq(Mux(
+                    ClockSignal("shift"),
+                    pixel_clk_r[0],
+                    pixel_clk_r[1]
+                )),
 
-                self.dvid_out.o_clk.eq(ClockSignal("shift")),
-                self.dvid_out.o0.eq(Cat(pixel_b_r[0], pixel_g_r[0], pixel_r_r[0])),
-                self.dvid_out.o1.eq(Cat(pixel_b_r[1], pixel_g_r[1], pixel_r_r[1])),
+                self.dvid_out.eq(Mux(
+                    ClockSignal("shift"),
+                    Cat(pixel_b_r[0], pixel_g_r[0], pixel_r_r[0]),
+                    Cat(pixel_b_r[1], pixel_g_r[1], pixel_r_r[1])
+                ))
             ]
-        elif xdr == 4:
+        elif xdr == 2 and emulate_ddr == False:
             m.d.comb += [
                 self.dvid_out_clk.o_clk.eq(ClockSignal("shift")),
-                self.dvid_out_clk.o_fclk.eq(ClockSignal("shift_fast")),
                 self.dvid_out_clk.o0.eq(pixel_clk_r[0]),
                 self.dvid_out_clk.o1.eq(pixel_clk_r[1]),
-                self.dvid_out_clk.o2.eq(pixel_clk_r[2]),
-                self.dvid_out_clk.o3.eq(pixel_clk_r[3]),
 
                 self.dvid_out.o_clk.eq(ClockSignal("shift")),
-                self.dvid_out.o_fclk.eq(ClockSignal("shift_fast")),
                 self.dvid_out.o0.eq(Cat(pixel_b_r[0], pixel_g_r[0], pixel_r_r[0])),
                 self.dvid_out.o1.eq(Cat(pixel_b_r[1], pixel_g_r[1], pixel_r_r[1])),
-                self.dvid_out.o2.eq(Cat(pixel_b_r[2], pixel_g_r[2], pixel_r_r[2])),
-                self.dvid_out.o3.eq(Cat(pixel_b_r[3], pixel_g_r[3], pixel_r_r[3])),
-            ]
-        elif xdr == 7:
-            m.d.comb += [
-                self.dvid_out_clk.o_clk.eq(ClockSignal("shift")),
-                self.dvid_out_clk.o_fclk.eq(ClockSignal("shift_fast")),
-                self.dvid_out_clk.o0.eq(pixel_clk_r[0]),
-                self.dvid_out_clk.o1.eq(pixel_clk_r[1]),
-                self.dvid_out_clk.o2.eq(pixel_clk_r[2]),
-                self.dvid_out_clk.o3.eq(pixel_clk_r[3]),
-                self.dvid_out_clk.o4.eq(pixel_clk_r[4]),
-                self.dvid_out_clk.o5.eq(pixel_clk_r[5]),
-                self.dvid_out_clk.o6.eq(pixel_clk_r[6]),
-
-                self.dvid_out.o_clk.eq(ClockSignal("shift")),
-                self.dvid_out.o_fclk.eq(ClockSignal("shift_fast")),
-                self.dvid_out.o0.eq(Cat(pixel_b_r[0], pixel_g_r[0], pixel_r_r[0])),
-                self.dvid_out.o1.eq(Cat(pixel_b_r[1], pixel_g_r[1], pixel_r_r[1])),
-                self.dvid_out.o2.eq(Cat(pixel_b_r[2], pixel_g_r[2], pixel_r_r[2])),
-                self.dvid_out.o3.eq(Cat(pixel_b_r[3], pixel_g_r[3], pixel_r_r[3])),
-                self.dvid_out.o4.eq(Cat(pixel_b_r[4], pixel_g_r[4], pixel_r_r[4])),
-                self.dvid_out.o5.eq(Cat(pixel_b_r[5], pixel_g_r[5], pixel_r_r[5])),
-                self.dvid_out.o6.eq(Cat(pixel_b_r[6], pixel_g_r[6], pixel_r_r[6])),
             ]
 
         return m
@@ -218,17 +156,7 @@ class DVIDParameters():
             self.pixel_freq_mhz)
 
 dvid_configs = {
-    "320x240p60": DVIDParameters(VGAParameters(
-            h_front=8,
-            h_sync=32,
-            h_back=80,
-            h_active=480,
-            v_front=3,
-            v_sync=6,
-            v_back=6,
-            v_active=360,
-        ), 100, 25),
-
+    
     "640x480p60": DVIDParameters(VGAParameters(
             h_front=16,
             h_sync=96,
@@ -239,18 +167,6 @@ dvid_configs = {
             v_back=31,
             v_active=480,
         ), 100, 25),
-
-    # This uses a clock that is compatible with xdr=7
-    "640x480p60_7": DVIDParameters(VGAParameters(
-            h_front=16,
-            h_sync=96,
-            h_back=44,
-            h_active=640,
-            v_front=10,
-            v_sync=2,
-            v_back=31,
-            v_active=480,
-        ), 100, 28),
 
     "1280x720p60": DVIDParameters(VGAParameters(
             h_front=82,
@@ -263,81 +179,87 @@ dvid_configs = {
             v_active=720,
         ), 100, 74),
 
-    # This uses a clock that is compatible with xdr=7
-    "1280x720p60_7": DVIDParameters(VGAParameters(
-            h_front=82,
-            h_sync=80,
-            h_back=202,
-            h_active=1280,
-            v_front=3,
-            v_sync=5,
-            v_back=22,
-            v_active=720,
-        ), 100, 70),
-
-    "1920x1080p30": DVIDParameters(VGAParameters(
-            h_front=80,
-            h_sync=44,
-            h_back=148,
-            h_active=1920,
-            v_front=4,
-            v_sync=5,
-            v_back=36,
-            v_active=1080,
-        ), 100, 74),
-
-    # This uses a clock that is compatible with xdr=7
-    "1920x1080p30_7": DVIDParameters(VGAParameters(
-            h_front=100,
-            h_sync=44,
-            h_back=215,
-            h_active=1920,
-            v_front=4,
-            v_sync=5,
-            v_back=36,
-            v_active=1080,
-        ), 100, 77),
-
-    # Should be 148.5 MHz but the PLL can't generate 742.5 MHz.
-    "1920x1080p60": DVIDParameters(VGAParameters(
-            h_front=88,
-            h_sync=44,
-            h_back=148,
-            h_active=1920,
-            v_front=4,
-            v_sync=5,
-            v_back=36,
-            v_active=1080,
-        ), 100, 150),
-
-    "2560x1440p30": DVIDParameters(VGAParameters(
-            h_front=48,
-            h_sync=32,
-            h_back=80,
-            h_active=2560,
-            v_front=3,
-            v_sync=5,
-            v_back=33,
-            v_active=1440,
-        ), 100, 122),
-
-    # Generates a 60Hz signal but needs 1.2V on VCC.
-    # Needs a simpler test image to meet timing on the sync/pixel cd.
-    # Can run at 205MHz@1.1V
-    "2560x1440p60": DVIDParameters(VGAParameters(
-            h_front=20,
-            h_sync=20,
-            h_back=20,
-            h_active=2560,
-            v_front=3,
-            v_sync=5,
-            v_back=5,
-            v_active=1440,
-        ), 100, 228),
 }
 
-class GOLApplet(Applet, applet_name="gol"):
-    help = "Game of Life generator"
+class GFXDemo(Elaboratable):
+    '''
+    Clock domains:
+    sync:   25 MHz
+    shift: 125 MHz
+    '''
+    def __init__(self, dvid_out, dvid_out_clk, vga_parameters, xdr, emulate_ddr, base_addr=0x3000_0000):
+        self.dvid_out = dvid_out
+        self.dvid_out_clk = dvid_out_clk
+        self.vga_parameters = vga_parameters
+        self.xdr = xdr
+        self.emulate_ddr = emulate_ddr
+        self.base_addr = base_addr
+
+        self.irq = Signal(2)
+
+        addr_width = 32
+        data_width = 32
+        granularity = 32
+
+        layout = [
+            ("adr",   addr_width, Direction.FANOUT),
+            ("dat_w", data_width, Direction.FANOUT),
+            ("dat_r", data_width, Direction.FANIN),
+            ("sel",   data_width // granularity, Direction.FANOUT),
+            ("cyc",   1, Direction.FANOUT),
+            ("stb",   1, Direction.FANOUT),
+            ("we",    1, Direction.FANOUT),
+            ("ack",   1, Direction.FANIN),
+        ]
+
+        self.wb = Record(layout=layout)
+
+    def elaborate(self, platform):
+
+        wb = self.wb
+        base_addr = self.base_addr
+
+        m = Module()
+
+        m.submodules.dvid_signal_generator = dvid = DVIDSignalGeneratorXDR(
+            dvid_out_clk=self.dvid_out_clk,
+            dvid_out=self.dvid_out,
+            vga_parameters=self.vga_parameters,
+            xdr=self.xdr,
+            emulate_ddr=self.emulate_ddr)
+        m.d.comb += self.irq.eq(dvid.irq)
+
+        rw0 = Signal(32)
+        rw1 = Signal(32)
+        rw2 = Signal(32)
+        rw3 = Signal(32)
+
+        m.submodules.wrapper = wrapper = BusWrapper(
+            #signals_rw=[rw0, rw1, rw2, rw3],
+            signals_w=[dvid.intensity],
+        )
+
+        print(wrapper)
+
+        m.d.comb += wrapper.cs.eq(0)
+        m.d.comb += wrapper.we.eq(wb.we)
+        m.d.comb += wrapper.addr.eq(wb.adr[2:8])
+
+        ack_r = Signal()
+
+        with m.If(wb.stb & wb.cyc & (wb.adr[8:] == (base_addr >> 8))):
+            m.d.comb += wrapper.cs.eq(1)
+            m.d.comb += wb.dat_r.eq(wrapper.read_data)
+            m.d.comb += wrapper.write_data.eq(wb.dat_w)
+            m.d.sync += wb.ack.eq(ack_r)
+            m.d.sync += ack_r.eq(0)
+        with m.Else():
+            m.d.sync += ack_r.eq(1)
+
+        return m
+
+class GFXDemoApplet(Applet, applet_name="gfxdemo"):
+    help = "Graphics demo"
     description = """
 
     """
@@ -362,6 +284,10 @@ class GOLApplet(Applet, applet_name="gol"):
         self.skip_pll_checks = args.skip_pll_checks
 
     def elaborate(self, platform):
+ 
+        xdr = self.xdr
+ 
+        m = Module()
 
         # PMOD2 pinout:
         # CLK B1/B2
@@ -370,29 +296,76 @@ class GOLApplet(Applet, applet_name="gol"):
         # D2  G2/F1 (r)  inverted
 
         platform.add_resources([
-            Resource("pmod2_lvds", 0, Pins("C1  D1  F1", dir="o"),
-                    Attrs(IO_TYPE="LVDS", DIFFRESISTOR="100")),
-            Resource("pmod2_lvds_clk", 0, Pins("B1", dir="o"),
-                    Attrs(IO_TYPE="LVDS", DIFFRESISTOR="100")),
+            Resource("pmod2", 0, Pins("C1  E2  G2", dir="o"),
+                    Attrs(IO_TYPE="LVCMOS33")),
+            Resource("pmod2_neg", 0, Pins("C2  D1  F1", dir="o"),
+                    Attrs(IO_TYPE="LVCMOS33")),
+            Resource("pmod2_clk", 0, Pins("B1", dir="o"),
+                    Attrs(IO_TYPE="LVCMOS33")),
+            Resource("pmod2_clk_neg", 0, Pins("B2", dir="o"),
+                    Attrs(IO_TYPE="LVCMOS33")),
         ])
 
-        xdr = self.xdr
         dvid_config = dvid_configs[self.dvid_config]
 
-        dvid_out_clk = platform.request("pmod2_lvds_clk", 0, xdr=xdr if xdr > 1 else 0)
-        dvid_out = platform.request("pmod2_lvds", 0, xdr=xdr if xdr > 1 else 0)
+        self.pll1_freq_mhz = dvid_config.pll1_freq_mhz
+        self.pixel_freq_mhz = dvid_config.pixel_freq_mhz
 
-        m = Module()
+        m.submodules.pll1 = ECP5PLL([
+            ECP5PLLConfig("clk_pll1", self.pll1_freq_mhz),
+        ], skip_checks=self.skip_pll_checks)
 
-        m.submodules.dvid_signal_generator = DVIDSignalGeneratorXDR(
-            dvid_out_clk=dvid_out_clk,
+        if xdr == 1:
+            pll_config = [
+                ECP5PLLConfig("shift", self.pixel_freq_mhz * 10),
+                ECP5PLLConfig("sync", self.pixel_freq_mhz),
+            ]
+        elif xdr == 2:
+            pll_config = [
+                ECP5PLLConfig("shift", self.pixel_freq_mhz * 10 / 2),
+                ECP5PLLConfig("sync", self.pixel_freq_mhz),
+            ]
+
+        m.submodules.pll2 = ECP5PLL(
+            pll_config,
+            clock_signal_name="clk_pll1",
+            clock_signal_freq=self.pll1_freq_mhz * 1e6,
+            skip_checks=self.skip_pll_checks)
+
+        # Force xdr=0 and emulate ddr to be closer to the asic setup
+        dvid_out_clk = platform.request("pmod2_clk", 0, xdr=0)
+        dvid_out_clk_neg = platform.request("pmod2_clk_neg", 0, xdr=0)
+        dvid_out = platform.request("pmod2", 0, xdr=0)
+        dvid_out_neg = platform.request("pmod2_neg", 0, xdr=0)
+
+        m.d.comb += [
+            dvid_out_clk_neg.eq(~dvid_out_clk),
+            dvid_out_neg.eq(~dvid_out),
+        ]
+
+        m.submodules.gfxdemo = gfxdemo = GFXDemo(
             dvid_out=dvid_out,
+            dvid_out_clk=dvid_out_clk,
             vga_parameters=dvid_config.vga_parameters,
-            pll1_freq_mhz=dvid_config.pll1_freq_mhz,
-            pixel_freq_mhz=dvid_config.pixel_freq_mhz,
             xdr=xdr,
-            skip_pll_checks=self.skip_pll_checks,
-            invert_outputs=[0, 0, 1, 1])
+            emulate_ddr=True)
+
+        m.submodules.buscontroller = buscontroller = BusController(
+            bus=gfxdemo.wb,
+            irq=gfxdemo.irq,
+            program=[
+                Asm.WFI(0b11),
+                *[Asm.WRITE(0x3000_0000, 255 if i&1 else 0) for i in range(640//4)],
+                Asm.WFI(0b01),
+                *[Asm.WRITE(0x3000_0000, 255 if i&1 else 0) for i in range(640//4)],
+                Asm.WFI(0b01),
+                *[Asm.WRITE(0x3000_0000, 255 if i&1 else 0) for i in range(640//4)],
+                Asm.WFI(0b01),
+                *[Asm.WRITE(0x3000_0000, 255 if i&1 else 0) for i in range(640//4)],
+                Asm.WRITE(0x3000_0000, 255),
+                Asm.JMP(0),
+            ]
+        )
 
         return m
 
