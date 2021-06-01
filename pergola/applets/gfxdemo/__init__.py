@@ -356,18 +356,23 @@ class GFXDemo(Elaboratable):
             vga=dvid.vga,
         )
 
+        v_sync_risen = Signal()
         v_sync_strobe = Signal()
-        with m.If((v_sync_strobe == 0) & dvid.vga_output.vs):
+        with m.If((v_sync_strobe == 0) & (v_sync_risen == 0) & dvid.vga_output.vs):
             m.d.sync += v_sync_strobe.eq(1)
-        with m.Elif((v_sync_strobe == 1) & (dvid.vga_output.vs == 0)):
+            m.d.sync += v_sync_risen.eq(1)
+        with m.Elif(v_sync_strobe & v_sync_risen):
             m.d.sync += v_sync_strobe.eq(0)
+        with m.Elif(v_sync_risen & (dvid.vga_output.vs == 0)):
+            m.d.sync += v_sync_risen.eq(0)
 
         # Only assert IRQ signals if IRQ is enabled
         #with m.If(self.irq_en):
         with m.If(1):
             m.d.comb += self.irq.eq(Cat(
-                (dvid.vga.h_ctr == 640),
+                dvid.vga.v_en & (dvid.vga.h_ctr == 640),
                 v_sync_strobe,
+#                (dvid.vga.h_ctr == 0) & (dvid.vga.v_ctr == 0),
             ))
 
         rgb_on = Signal(24)
@@ -545,13 +550,14 @@ class GFXDemoApplet(Applet, applet_name="gfxdemo"):
                 # # Asm.WRITE_IMM(0x80),
 
                 # Enable rotozoom
-                Asm.WFI(0b01),
-                Asm.MOV_R0(0x3000_0008),
-                Asm.WRITE_IMM(0x1),
+                # Asm.WFI(0b10),
+                # Asm.MOV_R0(0x3000_0008),
+                # Asm.WRITE_IMM(0x1),
 
                 #Enable rowbuffer
-                #Asm.WFI(0b10),
-                #Asm.WRITE_IMM(0x0),
+                Asm.WFI(0b10),
+                Asm.MOV_R0(0x3000_0008),
+                Asm.WRITE_IMM(0x0),
 
 
                 # Palette
@@ -560,29 +566,45 @@ class GFXDemoApplet(Applet, applet_name="gfxdemo"):
                 Asm.MOV_R0(0x3000_0010),
                 Asm.WRITE_IMM(0b11111111_11111111_11111111),
 
-                # # Vsync
-                # #Asm.WFI(0b10),
-                # Asm.MOV_R0(0x3000_0100),
-                # # Asm.WRITE_IMM(0b01010101_01010101_01010101_01010101),
-                # Asm.WRITE_IMM(0b1),
+                # Vsync
+                #Asm.WFI(0b10),
+                Asm.MOV_R0(0x3000_0100),
+                # Asm.WRITE_IMM(0b01010101_01010101_01010101_01010101),
+                Asm.WRITE_IMM(0b1),
 
-                # Asm.MOV_R0(0x3000_0100 + 4),
+                Asm.MOV_R0(0x3000_0100 + 4*0),
+                Asm.WRITE_IMM(0b10101010_10101010_10101010_10101010),
+
+                # Asm.MOV_R0(0x3000_0100 + 4*2),
                 # Asm.WRITE_IMM(0b10101010_10101010_10101010_10101010),
 
-                # Asm.MOV_R0(0x3000_0100 + 4*9),
-                # Asm.WRITE_IMM(0b10101010_10101010_10101010_10101010),
+                Asm.WFI(0b01),
+                Asm.MOV_R0(0x3000_0100 + 4*0),
+                Asm.WRITE_IMM(0b11111111_11111111_11111111_11111111),
+
+                # Asm.WFI(0b01),
+                # Asm.MOV_R0(0x3000_0100 + 4*2),
+                # Asm.WRITE_IMM(0b10000000_10000000_10000000_10000000),
+
+                # Asm.WFI(0b01),
+                # Asm.MOV_R0(0x3000_0100 + 4*2),
+                # Asm.WRITE_IMM(0b11111111_11111111_11111111_11111111),
+
+                Asm.WFI(0b01),
+                Asm.MOV_R0(0x3000_0100 + 4*2),
+                Asm.WRITE_IMM(0b00100000_00100000_00100000_00100000),
 
 
                 # Asm.MOV_R0(0x3000_0014),
                 # Asm.WRITE_IMM(0b0),
 
 
-                # Asm.MOV_R0(0x3000_0104),
-                # Asm.WRITE_IMM(0x0),
+                Asm.MOV_R0(0x3000_0104),
+                Asm.WRITE_IMM(0x0),
 
 
-                # *chain(*[[Asm.WFI(0b01), Asm.WRITE_IMM(i * 0x00010101)] for i in range(255)]),
-                # Asm.WRITE_IMM(0xff),
+                *chain(*[[Asm.WFI(0b01), Asm.WRITE_IMM(i * 0x00010101)] for i in range(255)]),
+                Asm.WRITE_IMM(0xff),
 
                 # Asm.WFI(0b11),
                 # Asm.MOV_R0(0x3000_0010),
