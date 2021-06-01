@@ -1,8 +1,5 @@
-from unittest.async_case import IsolatedAsyncioTestCase
 from nmigen import *
-from nmigen.hdl.ast import ArrayProxy
-from nmigen.lib.cdc import FFSynchronizer
-from nmigen.back.pysim import Simulator, Active
+from nmigen.back.pysim import Simulator
 from nmigen.back import cxxrtl
 from nmigen.test.utils import FHDLTestCase
 from nmigen.asserts import *
@@ -12,10 +9,9 @@ from nmigen.hdl.rec import Direction
 
 from .. import Applet
 from ...gateware.bus.buswrapper import BusWrapper
-from ...gateware.vga import VGAOutput, VGAOutputSubtarget, VGAParameters
+from ...gateware.vga import VGAOutputSubtarget, VGAParameters
 from ...gateware.vga2dvid import VGA2DVID
-from ...gateware.vga_testimage import TestImageGenerator, RotozoomImageGenerator
-# from ...gateware.gameoflife import GameOfLifeGenerator
+from ...gateware.vga_testimage import RotozoomImageGenerator
 from ...util.ecp5pll import ECP5PLL, ECP5PLLConfig
 
 from ...gateware.bus.buscontroller import Asm, BusController
@@ -170,27 +166,14 @@ dvid_configs = {
 }
 
 class RowBufferRenderer(Elaboratable):
-    def __init__(self, r, g, b, vga, readport):
-        self.r = r
-        self.g = g
-        self.b = b
+    def __init__(self, vga, readport):
         self.vga = vga
         self.readport = readport
-
-        self.r_on = Signal(8, reset=0xff)
-        self.g_on = Signal(8, reset=0xff)
-        self.b_on = Signal(8, reset=0xff)
-
-        self.r_off = Signal(8)
-        self.g_off = Signal(8)
-        self.b_off = Signal(8)
+        self.pixel_on = Signal()
 
     def elaborate(self, platform):
         m = Module()
 
-        r = self.r
-        g = self.g
-        b = self.b
         vga = self.vga
         readport = self.readport
         h_en = vga.h_en
@@ -207,28 +190,18 @@ class RowBufferRenderer(Elaboratable):
             h_en_r_r.eq(h_en_r),
         ]
 
-        pixel_on = Signal()
         shiftreg = Signal(32)
 
         with m.If(h_en_r_r):
             m.d.comb += [
                 readport.addr.eq(addr_r[6:]),
-                pixel_on.eq(shiftreg[0]),
+                self.pixel_on.eq(shiftreg[0]),
             ]
 
         with m.If(addr_r_r[:6] == 0):
             m.d.sync += shiftreg.eq(readport.data)
         with m.Elif(~addr_r_r[0]):
             m.d.sync += shiftreg.eq(shiftreg[1:])
-
-        with m.If(pixel_on):
-            m.d.comb += r.eq(self.r_on)
-            m.d.comb += g.eq(self.g_on)
-            m.d.comb += b.eq(self.b_on)
-        with m.Else():
-            m.d.comb += r.eq(self.r_off)
-            m.d.comb += g.eq(self.g_off)
-            m.d.comb += b.eq(self.b_off)
 
         return m
 
@@ -286,27 +259,7 @@ class GFXDemo(Elaboratable):
         g = Signal(8)
         b = Signal(8)
 
-        rotozoom_r = Signal(8)
-        rotozoom_g = Signal(8)
-        rotozoom_b = Signal(8)
-
-        rowbuf_r = Signal(8)
-        rowbuf_g = Signal(8)
-        rowbuf_b = Signal(8)
-
-        effect_mux = Signal()
-        with m.If(effect_mux):
-            m.d.comb += [
-                r.eq(rotozoom_r),
-                g.eq(rotozoom_g),
-                b.eq(rotozoom_b),
-            ]
-        with m.Else():
-            m.d.comb += [
-                r.eq(rowbuf_r),
-                g.eq(rowbuf_g),
-                b.eq(rowbuf_b),
-            ]
+        pixel_on = Signal()
 
         m.submodules.dvid_signal_generator = dvid = DVIDSignalGeneratorXDR(
             dvid_out_clk=self.dvid_out_clk,
@@ -322,9 +275,6 @@ class GFXDemo(Elaboratable):
             vsync=dvid.vga_output.vs,
             h_ctr=dvid.vga.h_ctr,
             v_ctr=dvid.vga.v_ctr,
-            r=rotozoom_r,
-            g=rotozoom_g,
-            b=rotozoom_b,
             width=self.vga_parameters.h_active,
             height=self.vga_parameters.v_active)
 
@@ -349,12 +299,25 @@ class GFXDemo(Elaboratable):
         m.submodules.mem_wr = mem_wr = rowbuf.write_port()
 
         m.submodules.rbrenderer = rbrenderer = RowBufferRenderer(
-            r=rowbuf_r,
-            g=rowbuf_g,
-            b=rowbuf_b,
             readport=mem_rd,
             vga=dvid.vga,
         )
+
+        rgb_on = Signal(24, reset=0xffffff)
+        rgb_off = Signal(24)
+
+        effect_mux = Signal()
+        m.d.comb += pixel_on.eq(Mux(effect_mux, rotozoom.pixel_on, rbrenderer.pixel_on))
+
+        with m.If(pixel_on):
+            m.d.comb += r.eq(rgb_on[ 0:8])
+            m.d.comb += g.eq(rgb_on[ 8:16])
+            m.d.comb += b.eq(rgb_on[16:24])
+        with m.Else():
+            m.d.comb += r.eq(rgb_off[ 0:8])
+            m.d.comb += g.eq(rgb_off[ 8:16])
+            m.d.comb += b.eq(rgb_off[16:24])
+
 
         v_sync_risen = Signal()
         v_sync_strobe = Signal()
@@ -367,34 +330,11 @@ class GFXDemo(Elaboratable):
             m.d.sync += v_sync_risen.eq(0)
 
         # Only assert IRQ signals if IRQ is enabled
-        #with m.If(self.irq_en):
-        with m.If(1):
+        with m.If(self.irq_en):
             m.d.comb += self.irq.eq(Cat(
                 dvid.vga.v_en & (dvid.vga.h_ctr == 640),
                 v_sync_strobe,
-#                (dvid.vga.h_ctr == 0) & (dvid.vga.v_ctr == 0),
             ))
-
-        rgb_on = Signal(24)
-        rgb_off = Signal(24)
-
-        m.d.comb += [
-            rbrenderer.r_on.eq(rgb_on[ 0:8]),
-            rbrenderer.g_on.eq(rgb_on[ 8:16]),
-            rbrenderer.b_on.eq(rgb_on[16:24]),
-
-            rbrenderer.r_off.eq(rgb_off[ 0:8]),
-            rbrenderer.g_off.eq(rgb_off[ 8:16]),
-            rbrenderer.b_off.eq(rgb_off[16:24]),
-
-            rotozoom.r_on.eq(rgb_on[ 0:8]),
-            rotozoom.g_on.eq(rgb_on[ 8:16]),
-            rotozoom.b_on.eq(rgb_on[16:24]),
-
-            rotozoom.r_off.eq(rgb_off[ 0:8]),
-            rotozoom.g_off.eq(rgb_off[ 8:16]),
-            rotozoom.b_off.eq(rgb_off[16:24]),
-        ]
 
         m.submodules.wrapper = wrapper = BusWrapper(
             signals_w=[
@@ -551,6 +491,13 @@ class GFXDemoApplet(Applet, applet_name="gfxdemo"):
 
                 # Enable rotozoom
                 # Asm.WFI(0b10),
+
+                # Palette
+                # Asm.MOV_R0(0x3000_000C),
+                # Asm.WRITE_IMM(0xff),
+                # Asm.MOV_R0(0x3000_0010),
+                # Asm.WRITE_IMM(0),
+
                 # Asm.MOV_R0(0x3000_0008),
                 # Asm.WRITE_IMM(0x1),
 

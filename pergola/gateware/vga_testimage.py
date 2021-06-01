@@ -60,25 +60,16 @@ class TestImageGenerator(Elaboratable):
 
 
 class RotozoomImageGenerator(Elaboratable):
-    def __init__(self, vsync, v_ctr, h_ctr, r, g, b, speed=1, width=640, height=480):
+    def __init__(self, vsync, v_ctr, h_ctr, speed=1, width=640, height=480):
         self.vsync = vsync
         self.v_ctr = v_ctr
         self.h_ctr = h_ctr
-        self.r = r
-        self.g = g
-        self.b = b
         self.frame = Signal(16)
         self.speed = speed
         self.width = width
         self.height = height
 
-        self.r_on = Signal(8, reset=0xff)
-        self.g_on = Signal(8, reset=0xff)
-        self.b_on = Signal(8, reset=0xff)
-
-        self.r_off = Signal(8)
-        self.g_off = Signal(8)
-        self.b_off = Signal(8)
+        self.pixel_on = Signal()
 
 
     # def hsv2rgb(self, m, h, s, v, r, g, b):
@@ -107,9 +98,6 @@ class RotozoomImageGenerator(Elaboratable):
         vsync = self.vsync
         v_ctr = self.v_ctr
         h_ctr = self.h_ctr
-        r = self.r
-        g = self.g
-        b = self.b
 
         H = Signal(8)
         ctr = Signal(2)
@@ -159,13 +147,15 @@ class RotozoomImageGenerator(Elaboratable):
 
 #        self.hsv2rgb(m, H, v_ctr[1:], Mux(ON, 255, 0), r, g, b)
 
-        with m.If(ON):
-            m.d.comb += r.eq(self.r_on)
-            m.d.comb += g.eq(self.g_on)
-            m.d.comb += b.eq(self.b_on)
-        with m.Else():
-            m.d.comb += r.eq(self.r_off)
-            m.d.comb += g.eq(self.g_off)
-            m.d.comb += b.eq(self.b_off)
+        m.d.comb += self.pixel_on.eq(ON)
+
+        # with m.If(ON):
+        #     m.d.comb += r.eq(self.r_on)
+        #     m.d.comb += g.eq(self.g_on)
+        #     m.d.comb += b.eq(self.b_on)
+        # with m.Else():
+        #     m.d.comb += r.eq(self.r_off)
+        #     m.d.comb += g.eq(self.g_off)
+        #     m.d.comb += b.eq(self.b_off)
 
         return m
