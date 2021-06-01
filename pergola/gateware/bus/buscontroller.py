@@ -19,31 +19,31 @@ class Asm():
 
     # R0 <- value
     def MOV_R0(value):
-        return (Opcodes.MOV_R0 << 32) | value
+        return (Opcodes.MOV_R0 << 32) | (value & 0xffffffff)
 
     # R0 <- R0 + value
     def ADD_R0(value):
-        return (Opcodes.ADD_R0 << 32) | value
+        return (Opcodes.ADD_R0 << 32) | (value & 0xffffffff)
 
     # R0 <- *addr
     def READ(addr):
-        return (Opcodes.READ << 32) | addr
+        return (Opcodes.READ << 32) | (addr & 0xffffffff)
 
     # addr <- R0
     def WRITE_R0(addr):
-        return (Opcodes.WRITE_R0 << 32) | addr
+        return (Opcodes.WRITE_R0 << 32) | (addr & 0xffffffff)
 
     # *R0 <- value
     def WRITE_IMM(value):
-        return (Opcodes.WRITE_IMM << 32) | value
+        return (Opcodes.WRITE_IMM << 32) | (value & 0xffffffff)
 
     # wait for all bits in irq to be simultaneously asserted
     def WFI(irq):
-        return (Opcodes.WFI << 32) | irq
+        return (Opcodes.WFI << 32) | (irq & 0xff)
 
     # pc <- rom_addr
     def JMP(rom_addr):
-        return (Opcodes.JMP << 32) | rom_addr
+        return (Opcodes.JMP << 32) | (rom_addr & 0xffffffff)
 
 class BusController(Elaboratable):
     def __init__(self, bus, irq, program):

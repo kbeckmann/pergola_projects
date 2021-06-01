@@ -71,27 +71,35 @@ class RotozoomImageGenerator(Elaboratable):
         self.speed = speed
         self.width = width
         self.height = height
-        self.intensity = Signal(8, reset=0xff)
 
-    def hsv2rgb(self, m, h, s, v, r, g, b):
-        region = h[5:]
-        fpart = (h - (region << 5)) * 6
-        p = (v * (255 - s)) >> 8
-        q = (v * (255 - ((s * fpart) >> 8))) >> 8
-        t = (v * (255 - ((s * (255 - fpart)) >> 8))) >> 8
-        with m.Switch(region):
-            with m.Case(0):
-                m.d.comb += [r.eq(v), g.eq(t), b.eq(p)]
-            with m.Case(1):
-                m.d.comb += [r.eq(q), g.eq(v), b.eq(p)]
-            with m.Case(2):
-                m.d.comb += [r.eq(p), g.eq(v), b.eq(t)]
-            with m.Case(3):
-                m.d.comb += [r.eq(p), g.eq(q), b.eq(v)]
-            with m.Case(4):
-                m.d.comb += [r.eq(t), g.eq(p), b.eq(v)]
-            with m.Case():
-                m.d.comb += [r.eq(v), g.eq(p), b.eq(q)]
+        self.r_on = Signal(8, reset=0xff)
+        self.g_on = Signal(8, reset=0xff)
+        self.b_on = Signal(8, reset=0xff)
+
+        self.r_off = Signal(8)
+        self.g_off = Signal(8)
+        self.b_off = Signal(8)
+
+
+    # def hsv2rgb(self, m, h, s, v, r, g, b):
+    #     region = h[5:]
+    #     fpart = (h - (region << 5)) * 6
+    #     p = (v * (255 - s)) >> 8
+    #     q = (v * (255 - ((s * fpart) >> 8))) >> 8
+    #     t = (v * (255 - ((s * (255 - fpart)) >> 8))) >> 8
+    #     with m.Switch(region):
+    #         with m.Case(0):
+    #             m.d.comb += [r.eq(v), g.eq(t), b.eq(p)]
+    #         with m.Case(1):
+    #             m.d.comb += [r.eq(q), g.eq(v), b.eq(p)]
+    #         with m.Case(2):
+    #             m.d.comb += [r.eq(p), g.eq(v), b.eq(t)]
+    #         with m.Case(3):
+    #             m.d.comb += [r.eq(p), g.eq(q), b.eq(v)]
+    #         with m.Case(4):
+    #             m.d.comb += [r.eq(t), g.eq(p), b.eq(v)]
+    #         with m.Case():
+    #             m.d.comb += [r.eq(v), g.eq(p), b.eq(q)]
 
     def elaborate(self, platform):
         m = Module()
@@ -150,6 +158,14 @@ class RotozoomImageGenerator(Elaboratable):
         #     # self.hsv2rgb(m, H, 255, Mux(ON, 255 - CIRCLE, 0), r, g, b)
 
 #        self.hsv2rgb(m, H, v_ctr[1:], Mux(ON, 255, 0), r, g, b)
-        m.d.sync += r.eq( Mux(ON, self.intensity, 0) )
+
+        with m.If(ON):
+            m.d.comb += r.eq(self.r_on)
+            m.d.comb += g.eq(self.g_on)
+            m.d.comb += b.eq(self.b_on)
+        with m.Else():
+            m.d.comb += r.eq(self.r_off)
+            m.d.comb += g.eq(self.g_off)
+            m.d.comb += b.eq(self.b_off)
 
         return m
