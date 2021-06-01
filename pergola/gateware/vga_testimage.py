@@ -71,6 +71,7 @@ class RotozoomImageGenerator(Elaboratable):
         self.speed = speed
         self.width = width
         self.height = height
+        self.intensity = Signal(8, reset=0xff)
 
     def hsv2rgb(self, m, h, s, v, r, g, b):
         region = h[5:]
@@ -103,6 +104,7 @@ class RotozoomImageGenerator(Elaboratable):
         b = self.b
 
         H = Signal(8)
+        ctr = Signal(2)
 
         frame = self.frame
         vsync_r = Signal()
@@ -112,7 +114,11 @@ class RotozoomImageGenerator(Elaboratable):
             with m.If(H == 191):
                 m.d.sync += H.eq(0)
             with m.Else():
-                m.d.sync += H.eq(H + 1)
+                with m.If(ctr == 0):
+                    m.d.sync += H.eq(H + 1)
+                    m.d.sync += ctr.eq(3)
+                with m.Else():
+                    m.d.sync += ctr.eq(ctr - 1)
 
         frame_tri = Mux(frame[10], ~frame[:10], frame[:10])
 
@@ -135,8 +141,15 @@ class RotozoomImageGenerator(Elaboratable):
 
         S = ((X+(Y*T)[6:]) & ((X*T)[6:]-Y))
         ON = (S[3:9] == 0)
+        # CIRCLE = (X * X + Y * Y)[9:18]
+
+        # with m.If(CIRCLE[8:]):
+        #     m.d.sync += [r.eq(0), g.eq(0), b.eq(0)]
+        # with m.Else():
+        #     m.d.sync += r.eq( Mux(ON, 255 - CIRCLE, 0) )
+        #     # self.hsv2rgb(m, H, 255, Mux(ON, 255 - CIRCLE, 0), r, g, b)
 
 #        self.hsv2rgb(m, H, v_ctr[1:], Mux(ON, 255, 0), r, g, b)
-        m.d.sync += r.eq( Mux(ON, 255, 0) )
+        m.d.sync += r.eq( Mux(ON, self.intensity, 0) )
 
         return m

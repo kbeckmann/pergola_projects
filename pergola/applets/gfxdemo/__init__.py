@@ -19,41 +19,42 @@ from ...util.ecp5pll import ECP5PLL, ECP5PLLConfig
 from ...gateware.bus.buscontroller import Asm, BusController
 
 class DVIDSignalGeneratorXDR(Elaboratable):
-    def __init__(self, dvid_out_clk, dvid_out, vga_parameters, xdr=1, emulate_ddr=False, invert_outputs=[0, 0, 0, 0]):
+    def __init__(self, dvid_out_clk, dvid_out, r, g, b, vga_parameters, xdr=1, emulate_ddr=False, invert_outputs=[0, 0, 0, 0]):
         self.dvid_out_clk = dvid_out_clk
         self.dvid_out = dvid_out
         self.vga_parameters = vga_parameters
         self.xdr = xdr
         self.emulate_ddr = emulate_ddr
         self.invert_outputs = invert_outputs
-        self.intensity = Signal(8, reset=0xff)
-        self.irq = Signal(2)
+
+        self.vga_output = Record([
+            ('hs', 1),
+            ('vs', 1),
+            ('blank', 1),
+        ])
+
+        self.r = r
+        self.g = g
+        self.b = b
+
+        self.vga = VGAOutputSubtarget(
+            output=self.vga_output,
+            vga_parameters=self.vga_parameters,
+        )
 
     def elaborate(self, platform):
         m = Module()
 
         xdr = self.xdr
         emulate_ddr = self.emulate_ddr
-
-        vga_output = Record([
-            ('hs', 1),
-            ('vs', 1),
-            ('blank', 1),
-        ])
-
-        r = Signal(8)
-        g = Signal(8)
-        b = Signal(8)
+        vga_output = self.vga_output
 
         pixel_r = Signal(xdr)
         pixel_g = Signal(xdr)
         pixel_b = Signal(xdr)
         pixel_clk = Signal(xdr)
 
-        m.submodules.vga = VGAOutputSubtarget(
-            output=vga_output,
-            vga_parameters=self.vga_parameters,
-        )
+        m.submodules.vga = self.vga
 
         delay_cycles = 4
         blank_r = Signal(delay_cycles)
@@ -66,9 +67,9 @@ class DVIDSignalGeneratorXDR(Elaboratable):
         ]
 
         m.submodules.vga2dvid = VGA2DVID(
-            in_r = r,
-            in_g = g,
-            in_b = b,
+            in_r = self.r,
+            in_g = self.g,
+            in_b = self.b,
             in_blank = blank_r[0],
             in_hsync = hs_r[0],
             in_vsync = vs_r[0],
@@ -82,20 +83,6 @@ class DVIDSignalGeneratorXDR(Elaboratable):
         )
 
 
-        m.submodules.rotozoom = rotozoom = RotozoomImageGenerator(
-            vsync=vga_output.vs,
-            h_ctr=m.submodules.vga.h_ctr,
-            v_ctr=m.submodules.vga.v_ctr,
-            r=r,
-            g=g,
-            b=b,
-            width=self.vga_parameters.h_active,
-            height=self.vga_parameters.v_active)
-        m.d.comb += rotozoom.intensity.eq(self.intensity)
-        m.d.comb += self.irq.eq(Cat(
-            (m.submodules.vga.h_ctr == 0),
-            (m.submodules.vga.v_ctr == 0)
-        ))
 
 
         # Store output bits in separate registers
@@ -197,6 +184,7 @@ class GFXDemo(Elaboratable):
         self.base_addr = base_addr
 
         self.irq = Signal(2)
+        self.irq_en = Signal(1)
         self.pdm_in = Signal(16)
 
         addr_width = 32
@@ -228,24 +216,46 @@ class GFXDemo(Elaboratable):
         m.d.sync += pdm.eq(pdm[:-1] + self.pdm_in)
         m.d.comb += self.pdm_out.eq(pdm[-1])
 
+        # Graphics
+
+        r = Signal(8)
+        g = Signal(8)
+        b = Signal(8)
+
         m.submodules.dvid_signal_generator = dvid = DVIDSignalGeneratorXDR(
             dvid_out_clk=self.dvid_out_clk,
             dvid_out=self.dvid_out,
+            r=r,
+            g=g,
+            b=b,
             vga_parameters=self.vga_parameters,
             xdr=self.xdr,
             emulate_ddr=self.emulate_ddr)
-        m.d.comb += self.irq.eq(dvid.irq)
 
-        rw0 = Signal(32)
-        rw1 = Signal(32)
-        rw2 = Signal(32)
-        rw3 = Signal(32)
+        m.submodules.rotozoom = rotozoom = RotozoomImageGenerator(
+            vsync=dvid.vga_output.vs,
+            h_ctr=dvid.vga.h_ctr,
+            v_ctr=dvid.vga.v_ctr,
+            r=r,
+            g=g,
+            b=b,
+            width=self.vga_parameters.h_active,
+            height=self.vga_parameters.v_active)
+
+        # Only assert IRQ if IRQ is enabled
+        with m.If(self.irq_en):
+            m.d.comb += self.irq.eq(Cat(
+                (dvid.vga.h_ctr == 0),
+                (dvid.vga.v_ctr == 0)
+            ))
 
         m.submodules.wrapper = wrapper = BusWrapper(
-            #signals_rw=[rw0, rw1, rw2, rw3],
             signals_w=[
-                dvid.intensity,
+                self.irq_en,
+                rotozoom.intensity,
                 self.pdm_in,
+                g,
+                b,
             ],
         )
 
@@ -363,26 +373,49 @@ class GFXDemoApplet(Applet, applet_name="gfxdemo"):
             xdr=xdr,
             emulate_ddr=True)
 
+        from itertools import chain
         m.submodules.buscontroller = buscontroller = BusController(
             bus=gfxdemo.wb,
             irq=gfxdemo.irq,
             program=[
-                Asm.WFI(0b01),
-                Asm.WRITE(0x3000_0000 + 4, 0xffff),
-                Asm.WFI(0b01),
-                Asm.WRITE(0x3000_0000 + 4, 0x0),
-                Asm.JMP(0),
+                # Enable interrupts
+                Asm.MOV_R0(1),
+                Asm.WRITE_R0(0x3000_0000),
 
-                # Asm.WFI(0b11),
-                # *[Asm.WRITE(0x3000_0000, 255 if i&1 else 0) for i in range(640//3)],
+                Asm.WFI(0b11),
+                Asm.MOV_R0(0x3000_0004),
+                Asm.WRITE_IMM(0x1),
+
                 # Asm.WFI(0b01),
-                # *[Asm.WRITE(0x3000_0000, 255 if i&1 else 0) for i in range(640//3)],
+                # Asm.MOV_R0(0x3000_0004),
+                # Asm.WRITE_IMM(0x80),
+
+                *chain(*[[Asm.WFI(0b01), Asm.WRITE_IMM(i)] for i in range(255)]),
+                Asm.WRITE_IMM(0xff),
+
+
+                # 5
+                #Asm.WFI(0b01),
+                #Asm.ADD_R0(0x1),
+                #Asm.WRITE(0x3000_0004),
+                #Asm.JMP(5),
+
+
+                # Asm.WRITE(0x3000_0004, 0xff),
+
+
+                # Green row
+                Asm.MOV_R0(0x3000_000C),
+                Asm.WFI(0b01),
+                *[Asm.WRITE_IMM(255 if i&1 else 0) for i in range(256)],
+                Asm.WRITE_IMM(0),
+
                 # Asm.WFI(0b01),
-                # *[Asm.WRITE(0x3000_0000, 255 if i&1 else 0) for i in range(640//3)],
-                # Asm.WFI(0b01),
-                # *[Asm.WRITE(0x3000_0000, 255 if i&1 else 0) for i in range(640//3)],
-                # Asm.WRITE(0x3000_0000, 127),
-                # Asm.JMP(0),
+                # *[Asm.WRITE(0x3000_000C, i) for i in range(255)],
+                # Asm.WRITE(0x3000_000C, 0),
+
+                # Asm.WRITE(0x3000_0004, 0xff),
+                Asm.JMP(0),
             ]
         )
 
@@ -397,60 +430,51 @@ class DVIDTest(FHDLTestCase):
     TODO: Write actual test cases. These are just to generate waveforms to analyze.
     '''
     def test_dvid(self):
-        output = Record([
-            ('hs', 1),
-            ('vs', 1),
-            ('blank', 1),
-            ('r',  8),
-            ('g',  8),
-            ('b',  8),
-        ])
 
         sync = ClockDomain()
         pixel = ClockDomain()
         m = Module()
         m.domains += sync, pixel
 
-        r = Signal(8)
-        g = Signal(8)
-        b = Signal(8)
+        dvid_config = dvid_configs["640x480p60"]
 
-        blank = Signal()
-        hsync = Signal()
-        vsync = Signal()
+        dvid_out = Signal(3)
+        dvid_out_clk = Signal(1)
+        pdm_out = Signal(1)
 
-        pixel_r = Signal()
-        pixel_g = Signal()
-        pixel_b = Signal()
-        pixel_clk = Signal()
+        m.submodules.gfxdemo = gfxdemo = GFXDemo(
+            dvid_out=dvid_out,
+            dvid_out_clk=dvid_out_clk,
+            pdm_out=pdm_out,
+            vga_parameters=dvid_config.vga_parameters,
+            xdr=2,
+            emulate_ddr=True)
 
-        m.submodules.vga = VGAOutputSubtarget(
-            output=output,
-            h_front=16,
-            h_sync=96,
-            h_back=44,
-            h_active=640,
-            v_front=10,
-            v_sync=2,
-            v_back=31,
-            v_active=480,
-        )
 
-        m.submodules.vga2dvid = VGA2DVID(
-            in_r = r,
-            in_g = g,
-            in_b = b,
-            in_blank = output.blank,
-            in_hsync = output.hs,
-            in_vsync = output.vs,
-            out_r = pixel_r,
-            out_g = pixel_g,
-            out_b = pixel_b,
-            out_clock = pixel_clk,
+        from itertools import chain
+        m.submodules.buscontroller = buscontroller = BusController(
+            bus=gfxdemo.wb,
+            irq=gfxdemo.irq,
+            program=[
+                Asm.NOP(),
+
+                Asm.MOV_R0(1),
+                Asm.WRITE_R0(0x3000_0000),
+
+                Asm.WFI(0b11),
+                Asm.MOV_R0(0x3000_0004),
+                Asm.WRITE_IMM(0x40),
+
+                Asm.WFI(0b01),
+                Asm.MOV_R0(0x3000_0004),
+                Asm.WRITE_IMM(0x80),
+
+                Asm.JMP(0),
+            ]
         )
 
         sim = Simulator(m)
-        sim.add_clock(period=1/25e6, phase=0, domain="sync")
+        sim.add_clock(period=1/25e6, domain="sync")
         sim.add_clock(period=1/250e6, phase=0, domain="pixel")
         def process():
             for _ in range(100):
