@@ -303,20 +303,45 @@ class GFXDemo(Elaboratable):
             vga=dvid.vga,
         )
 
-        rgb_on = Signal(3, reset=0b111)
-        rgb_off = Signal(3)
+        rgb_on = Signal(4, reset=0b0001)
+        rgb_off = Signal(4)
 
         effect_mux = Signal()
         m.d.comb += pixel_on.eq(Mux(effect_mux, rotozoom.pixel_on, rbrenderer.pixel_on))
 
+        palette = {
+            0:  [0x00, 0x00, 0x00],
+            1:  [0xFF, 0xFF, 0xFF],
+            2:  [0x88, 0x00, 0x00],
+            3:  [0xAA, 0xFF, 0xEE],
+            4:  [0xCC, 0x44, 0xCC],
+            5:  [0x00, 0xCC, 0x55],
+            6:  [0x00, 0x00, 0xAA],
+            7:  [0xEE, 0xEE, 0x77],
+            8:  [0xDD, 0x88, 0x55],
+            9:  [0x66, 0x44, 0x00],
+            10: [0xFF, 0x77, 0x77],
+            11: [0x33, 0x33, 0x33],
+            12: [0x77, 0x77, 0x77],
+            13: [0xAA, 0xFF, 0x66],
+            14: [0x00, 0x88, 0xFF],
+            15: [0xBB, 0xBB, 0xBB],
+        }
+
         with m.If(pixel_on):
-            m.d.comb += r.eq(Mux(rgb_on[0], 0xFF, 0x00))
-            m.d.comb += g.eq(Mux(rgb_on[1], 0xFF, 0x00))
-            m.d.comb += b.eq(Mux(rgb_on[2], 0xFF, 0x00))
+            with m.Switch(rgb_on):
+                for i, col in enumerate(palette.values()):
+                    with m.Case(i):
+                        m.d.comb += r.eq(col[0])
+                        m.d.comb += g.eq(col[1])
+                        m.d.comb += b.eq(col[2])
         with m.Else():
-            m.d.comb += r.eq(Mux(rgb_off[0], 0xFF, 0x00))
-            m.d.comb += g.eq(Mux(rgb_off[1], 0xFF, 0x00))
-            m.d.comb += b.eq(Mux(rgb_off[2], 0xFF, 0x00))
+            with m.Switch(rgb_off):
+                for i, col in enumerate(palette.values()):
+                    with m.Case(i):
+                        m.d.comb += r.eq(col[0])
+                        m.d.comb += g.eq(col[1])
+                        m.d.comb += b.eq(col[2])
 
 
         v_sync_risen = Signal()
@@ -488,30 +513,47 @@ class GFXDemoApplet(Applet, applet_name="gfxdemo"):
                 # # Asm.WRITE_IMM(0x80),
 
                 # Enable rotozoom
-                Asm.WFI(0b10),
+                # Asm.WFI(0b10),
 
                 # Palette
-                Asm.MOV_R0(0x3000_000C),
-                Asm.WRITE_IMM(0b001),
-                Asm.MOV_R0(0x3000_0010),
-                Asm.WRITE_IMM(0),
+                # Asm.MOV_R0(0x3000_000C),
+                # Asm.WRITE_IMM(0xff),
+                # Asm.MOV_R0(0x3000_0010),
+                # Asm.WRITE_IMM(0),
 
                 Asm.MOV_R0(0x3000_0008),
                 Asm.WRITE_IMM(0x1),
 
-                Asm.JMP(0),
-
                 #Enable rowbuffer
                 Asm.WFI(0b10),
                 Asm.MOV_R0(0x3000_0008),
-                Asm.WRITE_IMM(0x0),
-                
+                # Asm.WRITE_IMM(0x0),
+
 
                 # Palette
                 Asm.MOV_R0(0x3000_000C),
-                Asm.WRITE_IMM(0b11111111_00000000_11111101),
+                Asm.WRITE_IMM(0b00000_111111_00000),
                 Asm.MOV_R0(0x3000_0010),
-                Asm.WRITE_IMM(0b11111111_11111111_11111111),
+                Asm.WRITE_IMM(0b11111_111111_00000),
+
+
+                *chain(*[[
+                    Asm.MOV_R0(0x3000_000C),
+                    Asm.WRITE_IMM(i+1),
+                    Asm.MOV_R0(0x3000_0010),
+                    Asm.WRITE_IMM(i),
+                    Asm.WFI(0b01), 
+                    Asm.WFI(0b01), 
+                    Asm.WFI(0b01), 
+                    Asm.WFI(0b01), 
+                    Asm.WFI(0b01), 
+                    Asm.WFI(0b01), 
+                    Asm.WFI(0b01), 
+                    Asm.WFI(0b01), 
+                ] for i in range(16)]),
+
+                Asm.JMP(0),
+
 
                 # Vsync
                 #Asm.WFI(0b10),
@@ -551,7 +593,7 @@ class GFXDemoApplet(Applet, applet_name="gfxdemo"):
 
 
                 *chain(*[[Asm.WFI(0b01), Asm.WRITE_IMM(i * 0x00010101)] for i in range(255)]),
-                Asm.WRITE_IMM(0),
+                Asm.WRITE_IMM(0xff),
 
                 # Asm.WFI(0b11),
                 # Asm.MOV_R0(0x3000_0010),

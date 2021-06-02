@@ -64,7 +64,7 @@ class RotozoomImageGenerator(Elaboratable):
         self.vsync = vsync
         self.v_ctr = v_ctr
         self.h_ctr = h_ctr
-        self.frame = Signal(16)
+        self.frame = Signal(11)
         self.speed = speed
         self.width = width
         self.height = height
@@ -99,22 +99,11 @@ class RotozoomImageGenerator(Elaboratable):
         v_ctr = self.v_ctr
         h_ctr = self.h_ctr
 
-        H = Signal(8)
-        ctr = Signal(2)
-
         frame = self.frame
         vsync_r = Signal()
         m.d.sync += vsync_r.eq(vsync)
         with m.If(~vsync_r & vsync):
             m.d.sync += frame.eq(frame + 1)
-            with m.If(H == 191):
-                m.d.sync += H.eq(0)
-            with m.Else():
-                with m.If(ctr == 0):
-                    m.d.sync += H.eq(H + 1)
-                    m.d.sync += ctr.eq(3)
-                with m.Else():
-                    m.d.sync += ctr.eq(ctr - 1)
 
         frame_tri = Mux(frame[10], ~frame[:10], frame[:10])
 
