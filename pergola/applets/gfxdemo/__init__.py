@@ -328,7 +328,8 @@ class GFXDemo(Elaboratable):
                 self.pdm_in,            # 0x3000_0000
                 effect_mode,            # 0x3000_0004
                 rgb_on,                 # 0x3000_0008
-                rgb_off,                # 0x3000_000A
+                rgb_off,                # 0x3000_000C
+                dvid.vga.reset          # 0x3000_0010
             ],
         )
 
@@ -552,20 +553,23 @@ class DVIDTest(FHDLTestCase):
             bus=gfxdemo.wb,
             irq=gfxdemo.irq,
             program=[
+                # Mode = rbrenderer
+                Asm.MOV_R0(0x3000_0004),
+                Asm.WRITE_IMM(0x0),
+
+                # Draw stuff in the first 32 bits
+                Asm.MOV_R0(0x3000_0100), Asm.WRITE_IMM(0b01010101_01010101_01010101_01010101),
+
+                # Reset VGA
+                Asm.MOV_R0(0x3000_0010),
+                Asm.WRITE_IMM(0x1),
                 Asm.NOP(),
+                Asm.NOP(),
+                Asm.NOP(),
+                Asm.WRITE_IMM(0x0),
 
-                Asm.MOV_R0(1),
-                Asm.WRITE_R0(0x3000_0000),
-
-                Asm.WFI(0b11),
-                Asm.MOV_R0(0x3000_0004),
-                Asm.WRITE_IMM(0x40),
-
-                Asm.WFI(0b01),
-                Asm.MOV_R0(0x3000_0004),
-                Asm.WRITE_IMM(0x80),
-
-                Asm.JMP(0),
+                # Wait for vsync
+                Asm.WFI(0b10),
             ]
         )
 
