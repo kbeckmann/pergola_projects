@@ -272,12 +272,12 @@ class GFXDemo(Elaboratable):
         # Graphics
         m.submodules.dvid_signal_generator = dvid = self.dvid
 
-        m.submodules.rotozoom = rotozoom = RotozoomImageGenerator(
-            vsync=dvid.vga_output.vs,
-            h_ctr=dvid.vga.h_ctr,
-            v_ctr=dvid.vga.v_ctr,
-            width=self.vga_parameters.h_active,
-            height=self.vga_parameters.v_active)
+        # m.submodules.rotozoom = rotozoom = RotozoomImageGenerator(
+        #     vsync=dvid.vga_output.vs,
+        #     h_ctr=dvid.vga.h_ctr,
+        #     v_ctr=dvid.vga.v_ctr,
+        #     width=self.vga_parameters.h_active,
+        #     height=self.vga_parameters.v_active)
 
         rowbuf = Memory(width=32, depth=640//32//2)
         m.submodules.mem_rd = mem_rd = rowbuf.read_port()
@@ -296,7 +296,8 @@ class GFXDemo(Elaboratable):
         effect_mode = Signal()
 
         pixel_on = Signal()
-        m.d.comb += pixel_on.eq(Mux(effect_mode, rotozoom.pixel_on, rbrenderer.pixel_on))
+        # m.d.comb += pixel_on.eq(Mux(effect_mode, rotozoom.pixel_on, rbrenderer.pixel_on))
+        m.d.comb += pixel_on.eq(rbrenderer.pixel_on)
 
         m.d.comb += self.r.eq(Mux(pixel_on, rgb_on[ 0: 8], rgb_off[ 0: 8]))
         m.d.comb += self.g.eq(Mux(pixel_on, rgb_on[ 8:16], rgb_off[ 8:16]))
