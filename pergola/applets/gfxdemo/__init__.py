@@ -7,6 +7,10 @@ from nmigen.build.dsl import *
 
 from nmigen.hdl.rec import Direction
 
+from itertools import chain
+from colorsys import hsv_to_rgb
+
+
 from .. import Applet
 from ...gateware.bus.buswrapper import BusWrapper
 from ...gateware.vga import VGAOutputSubtarget, VGAParameters
@@ -15,6 +19,10 @@ from ...gateware.vga_testimage import RotozoomImageGenerator
 from ...util.ecp5pll import ECP5PLL, ECP5PLLConfig
 
 from ...gateware.bus.buscontroller import Asm, BusController
+
+def rgb_to_uint32(rgb):
+    return ((int(255 * rgb[0]) << 16) | (int(255 * rgb[1]) << 8) | int(255 * rgb[2]))
+
 
 class DVIDSignalGeneratorXDR(Elaboratable):
     def __init__(self, dvid_out_clk, dvid_out, r, g, b, vga_parameters, xdr=1, emulate_ddr=False):
@@ -186,17 +194,17 @@ class RowBufferRenderer(Elaboratable):
         ]
 
         shiftreg = Signal(32)
+        m.d.comb += self.pixel_on.eq(shiftreg[0]),
 
-        with m.If(h_en_r_r):
-            m.d.comb += [
-                readport.addr.eq(addr_r[6:]),
-                self.pixel_on.eq(shiftreg[0]),
-            ]
+        with m.If(h_en):
+            m.d.comb += readport.addr.eq(addr_r[6:])
 
         with m.If(addr_r_r[:6] == 0):
             m.d.sync += shiftreg.eq(readport.data)
         with m.Elif(~addr_r_r[0]):
+            # Shift every second cycle to stretch the buffer (320 -> 640)
             m.d.sync += shiftreg.eq(shiftreg[1:])
+
 
         return m
 
@@ -217,6 +225,20 @@ class GFXDemo(Elaboratable):
 
         self.irq = Signal(2)
         self.pdm_in = Signal(16)
+
+        self.r = Signal(8)
+        self.g = Signal(8)
+        self.b = Signal(8)
+
+        self.dvid = DVIDSignalGeneratorXDR(
+                    dvid_out_clk=self.dvid_out_clk,
+                    dvid_out=self.dvid_out,
+                    r=self.r,
+                    g=self.g,
+                    b=self.b,
+                    vga_parameters=self.vga_parameters,
+                    xdr=self.xdr,
+                    emulate_ddr=self.emulate_ddr)
 
         addr_width = 32
         data_width = 32
@@ -248,19 +270,7 @@ class GFXDemo(Elaboratable):
         m.d.comb += self.pdm_out.eq(pdm[-1])
 
         # Graphics
-        r = Signal(8)
-        g = Signal(8)
-        b = Signal(8)
-
-        m.submodules.dvid_signal_generator = dvid = DVIDSignalGeneratorXDR(
-            dvid_out_clk=self.dvid_out_clk,
-            dvid_out=self.dvid_out,
-            r=r,
-            g=g,
-            b=b,
-            vga_parameters=self.vga_parameters,
-            xdr=self.xdr,
-            emulate_ddr=self.emulate_ddr)
+        m.submodules.dvid_signal_generator = dvid = self.dvid
 
         m.submodules.rotozoom = rotozoom = RotozoomImageGenerator(
             vsync=dvid.vga_output.vs,
@@ -288,13 +298,13 @@ class GFXDemo(Elaboratable):
         pixel_on = Signal()
         m.d.comb += pixel_on.eq(Mux(effect_mode, rotozoom.pixel_on, rbrenderer.pixel_on))
 
-        m.d.comb += r.eq(Mux(pixel_on, rgb_on[ 0: 8], rgb_off[ 0: 8]))
-        m.d.comb += g.eq(Mux(pixel_on, rgb_on[ 8:16], rgb_off[ 8:16]))
-        m.d.comb += b.eq(Mux(pixel_on, rgb_on[16:24], rgb_off[16:24]))
+        m.d.comb += self.r.eq(Mux(pixel_on, rgb_on[ 0: 8], rgb_off[ 0: 8]))
+        m.d.comb += self.g.eq(Mux(pixel_on, rgb_on[ 8:16], rgb_off[ 8:16]))
+        m.d.comb += self.b.eq(Mux(pixel_on, rgb_on[16:24], rgb_off[16:24]))
 
-        # m.d.comb += r.eq(Mux(pixel_on, rgb_on[ 0: 4], rgb_off[ 0: 4]))
-        # m.d.comb += g.eq(Mux(pixel_on, rgb_on[ 4:8], rgb_off[ 4:8]))
-        # m.d.comb += b.eq(Mux(pixel_on, rgb_on[8:12], rgb_off[8:12]))
+        # m.d.comb += self.r.eq(Mux(pixel_on, rgb_on[ 0: 4], rgb_off[ 0: 4]))
+        # m.d.comb += self.g.eq(Mux(pixel_on, rgb_on[ 4:8], rgb_off[ 4:8]))
+        # m.d.comb += self.b.eq(Mux(pixel_on, rgb_on[8:12], rgb_off[8:12]))
 
 
         v_sync_risen = Signal()
@@ -444,39 +454,21 @@ class GFXDemoApplet(Applet, applet_name="gfxdemo"):
             xdr=xdr,
             emulate_ddr=True)
 
-        from itertools import chain
-        from colorsys import hsv_to_rgb
-
-        def rgb_to_uint32(rgb):
-            return ((int(255 * rgb[0]) << 16) | (int(255 * rgb[1]) << 8) | int(255 * rgb[2]))
-
         m.submodules.buscontroller = buscontroller = BusController(
             bus=gfxdemo.wb,
             irq=gfxdemo.irq,
             program=[
-                # Enable interrupts
-                Asm.MOV_R0(1),
+                # Set DAC value
+                Asm.MOV_R0(0x1234),
                 Asm.WRITE_R0(0x3000_0000),
-                
-                # Asm.MOV_R0(0x3000_0004),
-
-                # Asm.WFI(0b11),
-                # Asm.MOV_R0(0x3000_0004),
-                # Asm.WRITE_IMM(0x1),
-
-                # # Asm.WFI(0b01),
-                # # Asm.MOV_R0(0x3000_0004),
-                # # Asm.WRITE_IMM(0x80),
 
                 # Wait for VSync and enable rotozoom
                 Asm.WFI(0b10),
                 Asm.MOV_R0(0x3000_0004),
                 Asm.WRITE_IMM(0x1),
 
-                # Palette magic
+                # Palette magic, rainbow for rotozoom
                 *chain(*[[
-                    Asm.MOV_R0(0x3000_0104),
-                    Asm.WRITE_IMM(i * 0x00010101),
                     Asm.MOV_R0(0x3000_0008),
                     Asm.WRITE_IMM(rgb_to_uint32(hsv_to_rgb((120 - i) / 255, 1.0, 0.5))),
                     Asm.MOV_R0(0x3000_000C),
@@ -484,94 +476,11 @@ class GFXDemoApplet(Applet, applet_name="gfxdemo"):
                     Asm.WFI(0b01),
                 ] for i in range(100)]),
 
-
                 #Enable rowbuffer
-                # Asm.WFI(0b10),
                 Asm.MOV_R0(0x3000_0004),
                 Asm.WRITE_IMM(0x0),
 
-
-                # Palette
-                # Asm.MOV_R0(0x3000_0008),
-                # Asm.WRITE_IMM(0b00000_111111_00000),
-                # Asm.MOV_R0(0x3000_000C),
-                # Asm.WRITE_IMM(0b11111_111111_00000),
-
-
-                # *chain(*[[
-                #     Asm.MOV_R0(0x3000_0008),
-                #     Asm.WRITE_IMM(i<<3),
-                #     Asm.MOV_R0(0x3000_000C),
-                #     Asm.WRITE_IMM(i),
-                #     Asm.WFI(0b01), 
-                #     Asm.WFI(0b01), 
-                # ] for i in range(8)]),
-                # *chain(*[[
-                #     Asm.MOV_R0(0x3000_0008),
-                #     Asm.WRITE_IMM(i<<3),
-                #     Asm.MOV_R0(0x3000_000C),
-                #     Asm.WRITE_IMM(i<<3),
-                #     Asm.WFI(0b01), 
-                #     Asm.WFI(0b01), 
-                # ] for i in range(8)]),
-                # *chain(*[[
-                #     Asm.MOV_R0(0x3000_0008),
-                #     Asm.WRITE_IMM(i<<6),
-                #     Asm.MOV_R0(0x3000_000C),
-                #     Asm.WRITE_IMM(i<<6),
-                #     Asm.WFI(0b01), 
-                #     Asm.WFI(0b01), 
-                # ] for i in range(8)]),
-                # *chain(*[[
-                #     Asm.MOV_R0(0x3000_0008),
-                #     Asm.WRITE_IMM(i),
-                #     Asm.MOV_R0(0x3000_000C),
-                #     Asm.WRITE_IMM(i+1),
-                #     Asm.WFI(0b01), 
-                #     Asm.WFI(0b01), 
-                # ] for i in range(8)]),
-                # Asm.WRITE_IMM(0b111111111),
-
-                # Asm.JMP(0),
-
-
-                # Vsync
-                #Asm.WFI(0b10),
-                # Asm.MOV_R0(0x3000_0100),
-                # Asm.WRITE_IMM(0b01010101_01010101_01010101_01010101),
-                # Asm.WRITE_IMM(0b1),
-
-                # Asm.MOV_R0(0x3000_0100 + 4*0),
-                # Asm.WRITE_IMM(0b10101010_10101010_10101010_10101010),
-
-                # Asm.MOV_R0(0x3000_0100 + 4*2),
-                # Asm.WRITE_IMM(0b10101010_10101010_10101010_10101010),
-
-                # Asm.WFI(0b01),
-                # Asm.MOV_R0(0x3000_0100 + 4*0),
-                # Asm.WRITE_IMM(0b11111111_11111111_11111111_11111111),
-
-                # Asm.WFI(0b01),
-                # Asm.MOV_R0(0x3000_0100 + 4*2),
-                # Asm.WRITE_IMM(0b10000000_10000000_10000000_10000000),
-
-                # Asm.WFI(0b01),
-                # Asm.MOV_R0(0x3000_0100 + 4*2),
-                # Asm.WRITE_IMM(0b11111111_11111111_11111111_11111111),
-
-                # Asm.WFI(0b01),
-                # Asm.MOV_R0(0x3000_0100 + 4*2),
-                # Asm.WRITE_IMM(0b00100000_00100000_00100000_00100000),
-
-
-                # Asm.MOV_R0(0x3000_0014),
-                # Asm.WRITE_IMM(0b0),
-
-
-                # Asm.MOV_R0(0x3000_0104),
-                # Asm.WRITE_IMM(0x0),
-
-
+                # Palette magic, rainbow for rbrenderer
                 *chain(*[[
                     Asm.MOV_R0(0x3000_0104),
                     Asm.WRITE_IMM(i * 0x00010101),
@@ -581,45 +490,28 @@ class GFXDemoApplet(Applet, applet_name="gfxdemo"):
                     Asm.WRITE_IMM(rgb_to_uint32(hsv_to_rgb(i / 255, 1.0, 1.0))),
                     Asm.WFI(0b01),
                 ] for i in range(255)]),
-                # Asm.WRITE_IMM(0xff),
 
+                # Patterns
                 *chain(*[[
                     Asm.MOV_R0(0x3000_0100 + 4 * i), Asm.WRITE_IMM((1 << (i+1)) - 1),
-                    # Asm.MOV_R0(0x3000_0100 + 4 * i), Asm.WRITE_IMM(1 << i),
-                ] for i in range(10)]),
+                ] for i in range(9)]),
+
+                # Paint rows with alternating patterns
+                Asm.MOV_R0(0x3000_0100 + 4 * 0), Asm.WRITE_IMM(0b01000000_00000000_00000000_00000010),
+                Asm.MOV_R0(0x3000_0100 + 4 * 9), Asm.WRITE_IMM(0b01000000_00000000_00000011_11111110),
+
                 Asm.WFI(0b01),
+                Asm.MOV_R0(0x3000_0100 + 4 * 0), Asm.WRITE_IMM(0b10000000_00000000_00000000_00000001),
+                Asm.MOV_R0(0x3000_0100 + 4 * 9), Asm.WRITE_IMM(0b10000000_00000000_00000011_11111111),
 
+                Asm.WFI(0b01),
+                Asm.MOV_R0(0x3000_0100 + 4 * 0), Asm.WRITE_IMM(0b01000000_00000000_00000000_00000010),
+                Asm.MOV_R0(0x3000_0100 + 4 * 9), Asm.WRITE_IMM(0b01000000_00000000_00000011_11111110),
 
-                # Asm.WFI(0b11),
-                # Asm.MOV_R0(0x3000_000C),
-                # Asm.WRITE_IMM(0x0),
+                Asm.WFI(0b01),
+                Asm.MOV_R0(0x3000_0100 + 4 * 0), Asm.WRITE_IMM(0b10000000_00000000_00000000_00000001),
+                Asm.MOV_R0(0x3000_0100 + 4 * 9), Asm.WRITE_IMM(0b10000000_00000000_00000011_11111111),
 
-                #Asm.WFI(0b11),
-                # Asm.MOV_R0(0x3000_0000 + 4 * 4),
-                # Asm.WRITE_IMM(0x1),
-                # Asm.WFI(0b11),
-
-                # 5
-                #Asm.WFI(0b01),
-                #Asm.ADD_R0(0x1),
-                #Asm.WRITE(0x3000_0004),
-                #Asm.JMP(5),
-
-
-                # Asm.WRITE(0x3000_0004, 0xff),
-
-
-                # Green row
-                # Asm.MOV_R0(0x3000_0008),
-                # Asm.WFI(0b01),
-                # *[Asm.WRITE_IMM(255 if i&1 else 0) for i in range(256)],
-                # Asm.WRITE_IMM(0),
-
-                # Asm.WFI(0b01),
-                # *[Asm.WRITE(0x3000_0008, i) for i in range(255)],
-                # Asm.WRITE(0x3000_0008, 0),
-
-                # Asm.WRITE(0x3000_0004, 0xff),
                 Asm.JMP(0),
             ]
         )
@@ -656,7 +548,6 @@ class DVIDTest(FHDLTestCase):
             emulate_ddr=True)
 
 
-        from itertools import chain
         m.submodules.buscontroller = buscontroller = BusController(
             bus=gfxdemo.wb,
             irq=gfxdemo.irq,
@@ -750,32 +641,78 @@ class DVIDSim(FHDLTestCase):
 
         m = Module()
 
-        vga_output = Record([
-            ('hs', 1),
-            ('vs', 1),
-            ('blank', 1),
-        ])
-
-        r = Signal(8)
-        g = Signal(8)
-        b = Signal(8)
-
-        m.submodules.vga = VGAOutputSubtarget(
-            output=vga_output,
+        m.submodules.gfxdemo = gfxdemo = GFXDemo(
+            dvid_out=Signal(3),
+            dvid_out_clk=Signal(),
+            pdm_out=Signal(),
             vga_parameters=dvid_configs["640x480p60"].vga_parameters,
+            xdr=1,
+            emulate_ddr=False)
+
+        m.submodules.buscontroller = buscontroller = BusController(
+            bus=gfxdemo.wb,
+            irq=gfxdemo.irq,
+            program=[
+                # Set DAC value
+                Asm.MOV_R0(0x1234),
+                Asm.WRITE_R0(0x3000_0000),
+
+                # Wait for VSync and enable rotozoom
+                Asm.WFI(0b10),
+                Asm.MOV_R0(0x3000_0004),
+                Asm.WRITE_IMM(0x1),
+
+                # Palette magic, rainbow for rotozoom
+                *chain(*[[
+                    Asm.MOV_R0(0x3000_0008),
+                    Asm.WRITE_IMM(rgb_to_uint32(hsv_to_rgb((120 - i) / 255, 1.0, 0.5))),
+                    Asm.MOV_R0(0x3000_000C),
+                    Asm.WRITE_IMM(rgb_to_uint32(hsv_to_rgb((100 - i) / 255, 1.0, 1.0))),
+                    Asm.WFI(0b01),
+                ] for i in range(100)]),
+
+                #Enable rowbuffer
+                Asm.MOV_R0(0x3000_0004),
+                Asm.WRITE_IMM(0x0),
+
+                # Palette magic, rainbow for rbrenderer
+                *chain(*[[
+                    Asm.MOV_R0(0x3000_0104),
+                    Asm.WRITE_IMM(i * 0x00010101),
+                    Asm.MOV_R0(0x3000_0008),
+                    Asm.WRITE_IMM(i),
+                    Asm.MOV_R0(0x3000_000C),
+                    Asm.WRITE_IMM(rgb_to_uint32(hsv_to_rgb(i / 255, 1.0, 1.0))),
+                    Asm.WFI(0b01),
+                ] for i in range(255)]),
+
+                # Patterns
+                *chain(*[[
+                    Asm.MOV_R0(0x3000_0100 + 4 * i), Asm.WRITE_IMM((1 << (i+1)) - 1),
+                ] for i in range(9)]),
+
+                # Paint rows with alternating patterns
+                Asm.MOV_R0(0x3000_0100 + 4 * 0), Asm.WRITE_IMM(0b01000000_00000000_00000000_00000010),
+                Asm.MOV_R0(0x3000_0100 + 4 * 9), Asm.WRITE_IMM(0b01000000_00000000_00000011_11111110),
+
+                Asm.WFI(0b01),
+                Asm.MOV_R0(0x3000_0100 + 4 * 0), Asm.WRITE_IMM(0b10000000_00000000_00000000_00000001),
+                Asm.MOV_R0(0x3000_0100 + 4 * 9), Asm.WRITE_IMM(0b10000000_00000000_00000011_11111111),
+
+                Asm.WFI(0b01),
+                Asm.MOV_R0(0x3000_0100 + 4 * 0), Asm.WRITE_IMM(0b01000000_00000000_00000000_00000010),
+                Asm.MOV_R0(0x3000_0100 + 4 * 9), Asm.WRITE_IMM(0b01000000_00000000_00000011_11111110),
+
+                Asm.WFI(0b01),
+                Asm.MOV_R0(0x3000_0100 + 4 * 0), Asm.WRITE_IMM(0b10000000_00000000_00000000_00000001),
+                Asm.MOV_R0(0x3000_0100 + 4 * 9), Asm.WRITE_IMM(0b10000000_00000000_00000011_11111111),
+
+                Asm.JMP(0),
+            ]
         )
 
-        vs = vga_output.vs
-        v_en = m.submodules.vga.v_en
-        h_en = m.submodules.vga.h_en
-
-        m.submodules += GameOfLifeGenerator(
-            r=r,
-            g=g,
-            b=b,
-            vsync=vga_output.vs,
-            vga=m.submodules.vga,
-        )
+        v_en = gfxdemo.dvid.vga.v_en
+        h_en = gfxdemo.dvid.vga.h_en
 
         # Delay vga signals with 2 cycles
         h_en_r = Signal(2)
@@ -799,9 +736,9 @@ class DVIDSim(FHDLTestCase):
             i_clk=ClockSignal(),
             i_hen=h_en_r_lsb,
             i_ven=v_en_r_lsb,
-            i_r=r,
-            i_g=g,
-            i_b=b)
+            i_r=gfxdemo.r,
+            i_g=gfxdemo.g,
+            i_b=gfxdemo.b)
 
         output = cxxrtl.convert(m, black_boxes={"vga_phy": r"""
 attribute \cxxrtl_blackbox 1

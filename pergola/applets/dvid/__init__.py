@@ -128,7 +128,7 @@ class DVIDSignalGeneratorXDR(Elaboratable):
             xdr=xdr
         )
 
-        m.submodules += RotozoomImageGenerator(
+        m.submodules += TestImageGenerator(
             vsync=vga_output.vs,
             h_ctr=m.submodules.vga.h_ctr,
             v_ctr=m.submodules.vga.v_ctr,
