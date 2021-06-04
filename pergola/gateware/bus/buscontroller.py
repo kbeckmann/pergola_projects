@@ -55,8 +55,8 @@ class BusController(Elaboratable):
         self.pc = Signal(range(len(self.program)))
         self.r0 = Signal(32)
 
-        for x in program:
-            print(hex(x))
+        # for x in program:
+        #     print(hex(x))
 
     def elaborate(self, platform):
         bus = self.bus
