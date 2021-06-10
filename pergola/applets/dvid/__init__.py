@@ -9,7 +9,7 @@ from nmigen.build.dsl import *
 from .. import Applet
 from ...gateware.vga import VGAOutput, VGAOutputSubtarget, VGAParameters
 from ...gateware.vga2dvid import VGA2DVID
-from ...gateware.vga_testimage import TestImageGenerator
+from ...gateware.vga_testimage import TestImageGenerator, RotozoomImageGenerator
 from ...util.ecp5pll import ECP5PLL, ECP5PLLConfig
 
 
@@ -102,13 +102,23 @@ class DVIDSignalGeneratorXDR(Elaboratable):
             vga_parameters=self.vga_parameters,
         )
 
+        delay_cycles = 2
+        blank_r = Signal(delay_cycles)
+        hs_r = Signal(delay_cycles)
+        vs_r = Signal(delay_cycles)
+        m.d.sync += [
+            blank_r.eq(Cat(blank_r[1:], vga_output.blank)),
+            hs_r.eq(   Cat(hs_r[1:],    vga_output.hs)),
+            vs_r.eq(   Cat(vs_r[1:],    vga_output.vs)),
+        ]
+
         m.submodules.vga2dvid = VGA2DVID(
             in_r = r,
             in_g = g,
             in_b = b,
-            in_blank = vga_output.blank,
-            in_hsync = vga_output.hs,
-            in_vsync = vga_output.vs,
+            in_blank = blank_r[0],
+            in_hsync = hs_r[0],
+            in_vsync = vs_r[0],
             in_c1 = Const(0, 2),
             in_c2 = Const(0, 2),
             out_r = pixel_r,
@@ -124,7 +134,9 @@ class DVIDSignalGeneratorXDR(Elaboratable):
             v_ctr=m.submodules.vga.v_ctr,
             r=r,
             g=g,
-            b=b)
+            b=b,
+            width=self.vga_parameters.h_active,
+            height=self.vga_parameters.v_active)
 
         # Store output bits in separate registers
         #

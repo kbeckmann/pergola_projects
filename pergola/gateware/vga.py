@@ -145,8 +145,9 @@ class VGAOutputSubtarget(Elaboratable):
                 m.d.sync += output.b.eq(0),
 
         with m.If(self.reset):
-            m.d.sync += self.reset.eq(0)
-            m.d.sync += self.h_ctr.eq(self.h_total - 1) # hack to allow for a 1 clk delayed reset
+            m.d.sync += self.h_en.eq(0),
+            m.d.sync += self.v_en.eq(0),
+            m.d.sync += self.h_ctr.eq(0)
             m.d.sync += self.v_ctr.eq(0)
 
         return m

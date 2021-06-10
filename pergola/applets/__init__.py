@@ -40,6 +40,7 @@ from . import dvid
 from . import dvid_overlay
 from . import dvid_splitter
 from . import gearbox
+from . import gfxdemo
 from . import pll
 from . import radio_tx
 from . import uart
