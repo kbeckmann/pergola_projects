@@ -13,6 +13,7 @@ from colorsys import hsv_to_rgb
 
 from .. import Applet
 from ...gateware.bus.buswrapper import BusWrapper
+from ...gateware.bus.wb import get_layout
 from ...gateware.vga import VGAOutputSubtarget, VGAParameters
 from ...gateware.vga2dvid import VGA2DVID
 from ...gateware.vga_testimage import RotozoomImageGenerator
@@ -226,22 +227,7 @@ class GFXDemo(Elaboratable):
                     xdr=self.xdr,
                     emulate_ddr=self.emulate_ddr)
 
-        addr_width = 32
-        data_width = 32
-        granularity = 32
-
-        layout = [
-            ("adr",   addr_width, Direction.FANOUT),
-            ("dat_w", data_width, Direction.FANOUT),
-            ("dat_r", data_width, Direction.FANIN),
-            ("sel",   data_width // granularity, Direction.FANOUT),
-            ("cyc",   1, Direction.FANOUT),
-            ("stb",   1, Direction.FANOUT),
-            ("we",    1, Direction.FANOUT),
-            ("ack",   1, Direction.FANIN),
-        ]
-
-        self.wb = Record(layout=layout)
+        self.wb = Record(layout=get_layout())
 
     def elaborate(self, platform):
 
