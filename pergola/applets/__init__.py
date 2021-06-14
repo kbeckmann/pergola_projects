@@ -43,5 +43,6 @@ from . import gearbox
 from . import gfxdemo
 from . import pll
 from . import radio_tx
+from . import socdemo
 from . import uart
 from . import xdr
