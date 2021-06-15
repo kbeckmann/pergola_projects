@@ -29,7 +29,7 @@ class Asm():
     def READ(addr):
         return (Opcodes.READ << 32) | (addr & 0xffffffff)
 
-    # addr <- R0
+    # *addr <- R0
     def WRITE_R0(addr):
         return (Opcodes.WRITE_R0 << 32) | (addr & 0xffffffff)
 
