@@ -8,8 +8,8 @@ https://en.wikipedia.org/wiki/Systolic_array
 """
 
 
-class PE(Elaboratable):
-    """Processing Element, performs multiply accumulate and passes data.
+class ProcessingUnit(Elaboratable):
+    """Performs multiply accumulate and passes data.
 
                 top_in
                    v
@@ -99,7 +99,7 @@ class Delay(Elaboratable):
 class SystolicMatMul(Elaboratable):
     """Systolic Matrix Multiplication
 
-    Creates a mesh of processing elements to perform a matrix multiplication of left @ top.
+    Creates a mesh of processing units to perform a matrix multiplication of left @ top.
 
     When `buffered` is set, input and and output signals are delayed so that rows and columns
     can be shifted in and out one full row/column per cycle.
@@ -123,33 +123,33 @@ class SystolicMatMul(Elaboratable):
         for n in range(cols):
             self.top_in.append(Signal(shape, name=f"matmul_top_in_{n}"))
 
-        # Create the processing elements
-        self.pe = []
+        # Create the processing units
+        self.pu = []
         for r in range(rows):
             temp = []
             for c in range(cols):
-                pe = PE(shape, f"r{r}_c{c}")
-                temp.append(pe)
-            self.pe.append(temp)
+                pu = ProcessingUnit(shape, f"r{r}_c{c}")
+                temp.append(pu)
+            self.pu.append(temp)
 
 
     def elaborate(self, platform):
         rows = self.rows
         cols = self.cols
         shape = self.shape
-        pe = self.pe
+        pu = self.pu
 
         m = Module()
 
         for r in range(rows):
             for c in range(cols):
                 # Add PEs and connect them together in a mesh.
-                setattr(m.submodules, f"pe_r{r}_c{c}", pe[r][c])
+                setattr(m.submodules, f"pu_r{r}_c{c}", pu[r][c])
                 if c > 0:
-                    m.d.comb += pe[r][c].done_in.eq(pe[r][c-1].done_out)
-                    m.d.comb += pe[r][c].left_in.eq(pe[r][c-1].right_out)
+                    m.d.comb += pu[r][c].done_in.eq(pu[r][c-1].done_out)
+                    m.d.comb += pu[r][c].left_in.eq(pu[r][c-1].right_out)
                 if r > 0:
-                    m.d.comb += pe[r][c].top_in.eq(pe[r-1][c].bottom_out)
+                    m.d.comb += pu[r][c].top_in.eq(pu[r-1][c].bottom_out)
 
         if self.buffered:
             # Inputs and outputs are delayed so that rows and columns
@@ -158,33 +158,33 @@ class SystolicMatMul(Elaboratable):
                 delay = Delay(shape, r)
                 setattr(m.submodules, f"delay_left_row_{r}", delay)
                 m.d.comb += delay.w_data.eq(self.left_in[r])
-                m.d.comb += pe[r][0].left_in.eq(delay.r_data)
+                m.d.comb += pu[r][0].left_in.eq(delay.r_data)
 
                 delay_final = Delay(shape, r)
                 setattr(m.submodules, f"delay_final_{r}", delay_final)
                 m.d.comb += delay_final.w_data.eq(self.done_in[r])
-                m.d.comb += pe[r][0].done_in.eq(delay_final.r_data)
+                m.d.comb += pu[r][0].done_in.eq(delay_final.r_data)
 
                 delay_right = Delay(shape, rows - r)
                 setattr(m.submodules, f"delay_right_{r}", delay_right)
-                m.d.comb += delay_right.w_data.eq(pe[r][-1].right_out)
+                m.d.comb += delay_right.w_data.eq(pu[r][-1].right_out)
                 m.d.comb += self.right_out[r].eq(delay_right.r_data)
 
             for c in range(cols):
                 delay = Delay(shape, c)
                 setattr(m.submodules,f"delay_top_col_{c}", delay)
                 m.d.comb += delay.w_data.eq(self.top_in[c])
-                m.d.comb += pe[0][c].top_in.eq(delay.r_data)
+                m.d.comb += pu[0][c].top_in.eq(delay.r_data)
         else:
             # No delays. Uses fewer registers, but requires the user to
             # order the data accordingly.
             for r in range(rows):
-                m.d.comb += pe[r][0].left_in.eq(self.left_in[r])
-                m.d.comb += pe[r][0].done_in.eq(self.done_in[r])
-                m.d.comb += self.right_out[r].eq(pe[r][-1].right_out)
+                m.d.comb += pu[r][0].left_in.eq(self.left_in[r])
+                m.d.comb += pu[r][0].done_in.eq(self.done_in[r])
+                m.d.comb += self.right_out[r].eq(pu[r][-1].right_out)
 
             for c in range(cols):
-                m.d.comb += pe[0][c].top_in.eq(self.top_in[c])
+                m.d.comb += pu[0][c].top_in.eq(self.top_in[c])
 
         return m
 
@@ -234,22 +234,22 @@ class MatMulTest(FHDLTestCase):
             sim.run()
 
     def test_pe_chained(self):
-        # Test multiple PE() that are chained together horizontally.
+        # Test multiple ProcessingUnits that are chained together horizontally.
 
         m = Module()
 
         shape = unsigned(32)
         cols = 4
 
-        pe = []
+        pu = []
         for i in range(cols):
-            elem = PE(shape, f"{i}")
-            pe.append(elem)
+            elem = ProcessingUnit(shape, f"{i}")
+            pu.append(elem)
             setattr(m.submodules, f"pe_{i}", elem)
             if i > 0:
                 m.d.comb += [
-                    pe[i].left_in.eq(pe[i - 1].right_out),
-                    pe[i].done_in.eq(pe[i - 1].done_out),
+                    pu[i].left_in.eq(pu[i - 1].right_out),
+                    pu[i].done_in.eq(pu[i - 1].done_out),
                 ]
 
         sim = Simulator(m)
@@ -258,26 +258,26 @@ class MatMulTest(FHDLTestCase):
         def process():
             # Start shifting in the first set
             for i in range(1, cols):
-                yield pe[0].left_in.eq(i)
+                yield pu[0].left_in.eq(i)
                 yield
 
-            yield pe[0].left_in.eq(cols)
+            yield pu[0].left_in.eq(cols)
             for i in range(cols):
-                yield pe[i].top_in.eq(10)
+                yield pu[i].top_in.eq(10)
 
             yield
 
             # End the set by strobing done_in and resetting input signals
-            yield pe[0].done_in.eq(1)
-            yield pe[0].left_in.eq(0)
+            yield pu[0].done_in.eq(1)
+            yield pu[0].left_in.eq(0)
 
             for i in range(cols):
-                yield pe[i].top_in.eq(0)
+                yield pu[i].top_in.eq(0)
 
             yield
 
             # Deassert done_in
-            yield pe[0].done_in.eq(0)
+            yield pu[0].done_in.eq(0)
 
             # Let the signals propagate
             for i in range(cols):
@@ -287,13 +287,13 @@ class MatMulTest(FHDLTestCase):
             for i in range(cols, 0, -1):
                 # Strobe done_in for the second set
                 if i == 0:
-                    yield pe[0].done_in.eq(1)
+                    yield pu[0].done_in.eq(1)
                 elif i == 1:
-                    yield pe[0].done_in.eq(0)
+                    yield pu[0].done_in.eq(0)
 
                 # Results of the first set are shifted out
-                # print((yield pe[-1].right_out))
-                assert (yield pe[-1].right_out) == i * 10
+                # print((yield pu[-1].right_out))
+                assert (yield pu[-1].right_out) == i * 10
                 yield
 
 
@@ -332,7 +332,6 @@ class MatMulTest(FHDLTestCase):
         def process():
 
             def print_state(matmul):
-                acc = np.zeros((rows, cols))
                 top_in = np.zeros((rows, cols))
                 left_in = np.zeros((rows, cols))
                 right_out = np.zeros((rows, cols))
@@ -342,14 +341,12 @@ class MatMulTest(FHDLTestCase):
                 for r in range(rows):
                     matmul_right_out[r] = (yield matmul.right_out[r])
                     for c in range(cols):
-                        acc[r, c] = (yield matmul.acc[r][c])
-                        top_in[r, c] = (yield matmul.pe[r][c].top_in)
-                        left_in[r, c] = (yield matmul.pe[r][c].left_in)
-                        right_out[r, c] = (yield matmul.pe[r][c].right_out)
-                        bottom_out[r, c] = (yield matmul.pe[r][c].bottom_out)
-                        done_out[r, c] = (yield matmul.pe[r][c].done_out)
+                        top_in[r, c] = (yield matmul.pu[r][c].top_in)
+                        left_in[r, c] = (yield matmul.pu[r][c].left_in)
+                        right_out[r, c] = (yield matmul.pu[r][c].right_out)
+                        bottom_out[r, c] = (yield matmul.pu[r][c].bottom_out)
+                        done_out[r, c] = (yield matmul.pu[r][c].done_out)
 
-                # print(acc)
                 # print(top_in)
                 # print(left_in)
                 # print(right_out)
