@@ -2,11 +2,6 @@ from nmigen import *
 from nmigen.back.pysim import Simulator
 from nmigen.test.utils import FHDLTestCase
 
-"""
-Matrix multiplication implemented with a systolic array.
-https://en.wikipedia.org/wiki/Systolic_array
-"""
-
 
 class ProcessingUnit(Elaboratable):
     """Performs multiply accumulate and passes data.
@@ -97,12 +92,26 @@ class Delay(Elaboratable):
         return m
 
 class SystolicMatMul(Elaboratable):
-    """Systolic Matrix Multiplication
+    """Matrix Multiplication using systolic arrays
 
     Creates a mesh of processing units to perform a matrix multiplication of left @ top.
 
     When `buffered` is set, input and and output signals are delayed so that rows and columns
     can be shifted in and out one full row/column per cycle.
+
+    Features:
+
+    Multiplies two square matrices of size n x n in 2n+1 cycles (plus n initial cycles of loading).
+
+    Uses n*n multipliers and accumulators.
+
+    TODO:
+
+    Improve utilization with better pipelining. Currently it takes 2n+1 cycles to multiply two n x n matrices.
+
+    Add support for mixed precision. Accumulate and pass signals with more bits, but muliply with fewer.
+
+    Add support for various floating point data types. bfloat16 or tf32 (19 bits) would be suitable.
 
     """
     def __init__(self, rows, cols, shape, buffered=True):
